@@ -1,0 +1,10 @@
+{
+  "id": "openai-node-v4",
+  "provider": "openai",
+  "type": "breaking",
+  "title": "OpenAI Node SDK v3 → v4",
+  "summary": "openai v4 is a rewrite: Configuration and OpenAIApi are gone, methods moved to resource namespaces, and responses are no longer wrapped in .data.",
+  "sourceUrl": "https://github.com/openai/openai-node/discussions/217",
+  "affects": { "package": "openai", "versionRange": "<4.0.0", "symbols": ["Configuration", "OpenAIApi", "createChatCompletion", "createCompletion", "createEmbedding", "createImage"] },
+  "migration": "1. In package.json set \"openai\" to \"^4.104.0\".\n2. Replace `import { Configuration, OpenAIApi } from \"openai\"` with `import OpenAI from \"openai\"`, and `new OpenAIApi(new Configuration({ apiKey }))` with `new OpenAI({ apiKey })`.\n3. `openai.createChatCompletion(params)` -> `openai.chat.completions.create(params)`; `createCompletion` -> `completions.create`; `createEmbedding` -> `embeddings.create`; `createImage` -> `images.generate`.\n4. Responses are no longer wrapped: `response.data.choices` -> `response.choices`, `response.data.data` -> `response.data`.\n5. Message param types: use `OpenAI.Chat.ChatCompletionMessageParam` instead of `ChatCompletionRequestMessage`."
+}

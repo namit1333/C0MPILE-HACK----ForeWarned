@@ -1,0 +1,25 @@
+{
+  "id": "openai-legacy-models-2026-10-23",
+  "provider": "openai",
+  "type": "deprecation",
+  "title": "Legacy OpenAI models shut down on Oct 23, 2026",
+  "summary": "OpenAI is removing a batch of older models from the API on October 23, 2026, including gpt-3.5-turbo, gpt-4, gpt-4-turbo, gpt-4o-2024-05-13, o1, o3-mini and o4-mini. Requests to them will fail after that date. Each has a named substitute model.",
+  "effectiveDate": "2026-10-23",
+  "sourceUrl": "https://developers.openai.com/api/docs/deprecations",
+  "affects": {
+    "patterns": [
+      "^gpt-3\\.5-turbo(-0125)?$",
+      "^gpt-4(-0613)?$",
+      "^gpt-4-1106-preview$",
+      "^gpt-4-turbo(-2024-04-09)?$",
+      "^gpt-4\\.1-nano(-2025-04-14)?$",
+      "^gpt-4o-2024-05-13$",
+      "^gpt-image-1$",
+      "^o1(-2024-12-17)?$",
+      "^o1-pro(-2025-03-19)?$",
+      "^o3-mini(-2025-01-31)?$",
+      "^o4-mini(-2025-04-16)?$"
+    ]
+  },
+  "migration": "Replace each retiring model id string with its substitute from OpenAI's deprecations page (notice of 2026-04-22, 'Legacy GPT model snapshots'):\n- gpt-3.5-turbo, gpt-3.5-turbo-0125 -> gpt-5.6-terra\n- gpt-4, gpt-4-0613, gpt-4-1106-preview, gpt-4-turbo, gpt-4-turbo-2024-04-09 -> gpt-5.6-sol\n- gpt-4o-2024-05-13 -> gpt-5.6-sol\n- gpt-4.1-nano, gpt-4.1-nano-2025-04-14 -> gpt-5.6-luna\n- o1, o1-2024-12-17, o3-mini, o3-mini-2025-01-31 -> gpt-5.6-sol\n- o1-pro, o1-pro-2025-03-19 -> gpt-5.6-sol (with reasoning mode pro)\n- o4-mini, o4-mini-2025-04-16 -> gpt-5.6-terra\n- gpt-image-1 -> gpt-image-2.5-flare\nChange only the model id strings (in code, config files or env defaults). Do not change the SDK version, request parameters or response handling. If a string type or union restricts allowed model ids, add the new id to it."
+}
