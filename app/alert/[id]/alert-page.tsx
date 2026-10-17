@@ -14,9 +14,26 @@ interface AlertPayload {
 
 type Job = FixResult & { status: "running" | "done" | "failed" };
 
+const TYPE_STYLE: Record<ChangeRecord["type"], { label: string; dot: string }> = {
+  deprecation: { label: "Shutdown", dot: "bg-amber-400" },
+  breaking: { label: "Breaking", dot: "bg-red-500" },
+  feature: { label: "New feature", dot: "bg-sky-400" },
+};
+
+function formatDeadline(dateStr?: string): string | null {
+  if (!dateStr) return null;
+  const target = new Date(`${dateStr}T00:00:00`);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const days = Math.round((target.getTime() - now.getTime()) / 86_400_000);
+  const label = target.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const rel = days > 1 ? `in ${days} days` : days === 1 ? "tomorrow" : days === 0 ? "today" : `${-days} days ago`;
+  return `${rel} · ${label}`;
+}
+
 const VERIFICATION_BADGE: Record<Verification, { text: string; title: string }> = {
-  "tests-exercise-call": { text: "Verified: Tests exercise the call", title: "A passing test calls the changed SDK code without mocking it" },
-  "type-checked": { text: "Verified: Type-checked", title: "The type checker passed in an isolated Freestyle VM" },
+  "tests-exercise-call": { text: "Tests exercise the call", title: "A passing test calls the changed SDK code without mocking it" },
+  "type-checked": { text: "Type-checked", title: "The type checker passed in an isolated Freestyle VM" },
   unverified: { text: "Unverified", title: "Neither the type check nor an exercising test passed" },
 };
 
@@ -89,117 +106,165 @@ export default function AlertPage({ params }: { params: Promise<{ id: string }> 
 
   if (!data) {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-16 font-mono text-zinc-400">
-        {loadError ? <span className="text-rose-400">{loadError}</span> : "Loading alert..."}
+      <main className="mx-auto w-full max-w-6xl px-6 py-16 text-sm text-zinc-500">
+        {loadError ? <span className="text-red-400">{loadError}</span> : "Loading alert…"}
       </main>
     );
   }
 
   const { alert, change } = data;
   const repoSlugId = alert.repo.replace("/", "__");
+  const t = TYPE_STYLE[change.type];
+  const due = formatDeadline(change.effectiveDate);
+  const isFeature = change.type === "feature";
+  const ranInFreestyle = job?.log.some((l) => l.startsWith("Freestyle VM ready"));
+  const tsc = job?.checks.find((c) => c.name === "tsc");
+  const feedState =
+    status === "running"
+      ? { label: "Running", dot: "animate-pulse bg-amber-400" }
+      : status === "failed"
+        ? { label: "Failed", dot: "bg-red-500" }
+        : { label: "Done", dot: "bg-emerald-400" };
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-6 py-12">
-      <Link
-        href={`/repo/${repoSlugId}`}
-        className="mb-6 inline-block font-mono text-sm text-zinc-400 hover:text-teal-400"
-      >
-        ← Back to {alert.repo}
-      </Link>
-
-      <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950 p-6">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <span className="rounded border border-rose-500/40 bg-rose-500/15 px-2.5 py-0.5 font-mono text-xs font-bold uppercase text-rose-300">
-            {change.type}
-          </span>
-          <a
-            href={change.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-mono text-xs text-teal-400 hover:underline"
-          >
-            Source page →
-          </a>
+    <main className="mx-auto w-full max-w-6xl px-6 py-10">
+      {/* Header */}
+      <div className="border-b border-white/[0.08] pb-8">
+        <div className="flex items-center gap-2 text-sm text-zinc-500">
+          <Link href={`/repo/${repoSlugId}`} className="font-mono text-zinc-400 hover:text-white">
+            {alert.repo}
+          </Link>
+          <span className="text-zinc-700">/</span>
+          <span>{t.label.toLowerCase()}</span>
         </div>
-        <h1 className="mb-2 text-3xl font-bold text-zinc-50">{change.title}</h1>
-        <p className="text-base text-zinc-400">{change.summary}</p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-2.5 py-0.5 text-xs text-zinc-300">
+            <span className={`h-1.5 w-1.5 rounded-full ${t.dot}`} />
+            {t.label}
+          </span>
+          {due && <span className="font-mono text-xs text-amber-300/90">{due}</span>}
+        </div>
+        <h1 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-white sm:text-4xl">{change.title}</h1>
+        <p className="mt-3 max-w-3xl text-base leading-relaxed text-zinc-400">{change.summary}</p>
+        <a
+          href={change.sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-4 inline-flex items-center gap-1 text-sm text-zinc-400 underline decoration-zinc-700 underline-offset-4 hover:text-white hover:decoration-zinc-400"
+        >
+          Provider source ↗
+        </a>
+      </div>
 
-        <div className="mt-6">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-mono text-sm font-semibold text-zinc-300">
-              Affected call sites ({alert.callSites.length})
-            </h2>
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* Call sites */}
+        <section className="min-w-0 lg:col-span-5">
+          <h2 className="mb-3 text-sm font-medium text-zinc-400">
+            Affected call sites <span className="text-zinc-600">{alert.callSites.length}</span>
+          </h2>
+          <ul className="overflow-hidden rounded-xl border border-white/[0.08] bg-[#0a0a0a]">
+            {alert.callSites.map((s, idx) => (
+              <li key={`${s.file}:${s.line}:${idx}`} className="border-b border-white/[0.06] px-4 py-3 last:border-b-0">
+                <p className="truncate font-mono text-xs text-zinc-400">
+                  {s.file}
+                  <span className="text-zinc-600">:{s.line}</span>
+                </p>
+                <code className="mt-1.5 block overflow-x-auto whitespace-pre font-mono text-xs text-zinc-200">{s.snippet}</code>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* Fix */}
+        <section className="min-w-0 space-y-4 lg:col-span-7">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/[0.08] bg-[#0a0a0a] p-5">
+            <div>
+              <h2 className="text-sm font-medium text-white">{isFeature ? "Opportunity PR" : "Fix PR"}</h2>
+              <p className="mt-1 text-sm text-zinc-500">Patch, type-check in an isolated sandbox, open a PR on {alert.repo}.</p>
+              {dryRun && <p className="mt-1 font-mono text-xs text-sky-400">dry run · no push, no PR</p>}
+            </div>
             <button
               type="button"
               onClick={triggerFix}
               disabled={status === "running"}
-              className="h-11 rounded-lg bg-teal-500 px-5 font-semibold text-zinc-950 hover:opacity-90 disabled:opacity-50"
+              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md bg-white px-4 text-sm font-medium text-black transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {status === "running" ? "Fixing..." : "Open fix PR"}
+              {status === "running" && <span className="h-3 w-3 animate-spin rounded-full border-2 border-black border-r-transparent" />}
+              {status === "running" ? "Fixing…" : isFeature ? "Open opportunity PR" : "Open fix PR"}
             </button>
           </div>
-          <div className="space-y-2">
-            {alert.callSites.map((s, idx) => (
-              <div
-                key={`${s.file}:${s.line}:${idx}`}
-                className="rounded-lg border border-zinc-800 bg-black p-3 font-mono text-xs"
-              >
-                <div className="mb-1 flex justify-between text-teal-400">
-                  <span>
-                    {s.file}:{s.line}
-                  </span>
-                  <span className="text-zinc-300">{s.symbol}</span>
-                </div>
-                <div className="overflow-x-auto whitespace-pre text-zinc-400">{s.snippet}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
-      {log.length > 0 && (
-        <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950 p-6">
-          <h2 className="mb-4 text-lg font-bold text-zinc-100">Live progress</h2>
-          <div className="space-y-2 font-mono text-sm">
-            {log.map((line, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <span className={line.startsWith("Failed") ? "text-rose-400" : "text-emerald-400"}>{line.startsWith("Failed") ? "✗" : "✓"}</span>
-                <span className="text-zinc-300">{line}</span>
+          {log.length > 0 && (
+            <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-black">
+              <div className="flex items-center justify-between border-b border-white/[0.08] bg-[#0a0a0a] px-4 py-2.5">
+                <span className="text-xs font-medium text-zinc-400">Logs</span>
+                <span className="flex items-center gap-2 text-xs text-zinc-400">
+                  <span className={`h-1.5 w-1.5 rounded-full ${feedState.dot}`} />
+                  {feedState.label}
+                </span>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {status === "done" && prUrl && (
-        <div className="rounded-xl border border-teal-500/50 bg-zinc-950 p-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <a
-              href={prUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-2xl font-bold text-teal-400 hover:underline"
-            >
-              PR opened on GitHub →
-            </a>
-            {verification && (
-              <span
-                title={VERIFICATION_BADGE[verification].title}
-                className="rounded border border-teal-500/40 bg-teal-500/15 px-3 py-1 font-mono text-xs font-bold text-teal-300"
-              >
-                {VERIFICATION_BADGE[verification].text}
-              </span>
-            )}
-          </div>
-          {job && (
-            <p className="mt-3 font-mono text-sm text-zinc-400">
-              {job.checks.filter((c) => c.name === "tsc").map((c) => `tsc ${c.before} → ${c.after}`)[0] ?? "tsc skipped"} ·{" "}
-              {job.log.some((l) => l.startsWith("Freestyle VM ready")) ? "Freestyle isolated VM" : "local checks"} ·{" "}
-              {job.attempts} attempt{job.attempts === 1 ? "" : "s"}
-            </p>
+              <ol className="max-h-[420px] overflow-y-auto py-3 font-mono text-[12.5px] leading-6">
+                {log.map((line, i) => {
+                  const failed = line.startsWith("Failed");
+                  const freestyle = /Freestyle/.test(line);
+                  return (
+                    <li key={i} className={`flex gap-4 px-4 ${failed ? "bg-red-500/[0.06]" : "hover:bg-white/[0.02]"}`}>
+                      <span className="w-5 shrink-0 select-none text-right text-zinc-700">{i + 1}</span>
+                      <span className={`min-w-0 break-words ${failed ? "text-red-400" : freestyle ? "text-violet-300" : line.startsWith("PR opened") ? "text-emerald-400" : "text-zinc-300"}`}>
+                        {line}
+                      </span>
+                    </li>
+                  );
+                })}
+                {status === "running" && (
+                  <li className="flex gap-4 px-4">
+                    <span className="w-5 shrink-0" />
+                    <span className="animate-pulse text-zinc-600">▍</span>
+                  </li>
+                )}
+              </ol>
+            </div>
           )}
-        </div>
-      )}
+
+          {status === "done" && prUrl && (
+            <div className="rounded-xl border border-white/[0.08] bg-[#0a0a0a] p-5">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                  <a href={prUrl} target="_blank" rel="noopener noreferrer" className="text-base font-medium text-white hover:underline">
+                    Pull request #{prUrl.split("/").pop()} opened ↗
+                  </a>
+                </div>
+                {verification && (
+                  <span
+                    title={VERIFICATION_BADGE[verification].title}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-2.5 py-0.5 text-xs text-zinc-300"
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${verification === "unverified" ? "bg-amber-400" : "bg-emerald-400"}`} />
+                    {VERIFICATION_BADGE[verification].text}
+                  </span>
+                )}
+              </div>
+              {job && (
+                <dl className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.08] text-sm">
+                  <div className="bg-black px-4 py-3">
+                    <dt className="text-xs text-zinc-500">Type check</dt>
+                    <dd className="mt-1 font-mono text-zinc-200">{tsc ? `${tsc.before} → ${tsc.after}` : "skipped"}</dd>
+                  </div>
+                  <div className="bg-black px-4 py-3">
+                    <dt className="text-xs text-zinc-500">Ran in</dt>
+                    <dd className="mt-1 font-mono text-zinc-200">{ranInFreestyle ? "Freestyle VM" : "local"}</dd>
+                  </div>
+                  <div className="bg-black px-4 py-3">
+                    <dt className="text-xs text-zinc-500">Attempts</dt>
+                    <dd className="mt-1 font-mono text-zinc-200">{job.attempts}</dd>
+                  </div>
+                </dl>
+              )}
+            </div>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
