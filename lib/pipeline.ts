@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fixAlert, type FixOptions } from "./agent/fix";
 import { loadChanges, match, repoId } from "./matcher";
+import { openForewarnedPRs } from "./github";
 import { cloneRepo, parseRepo } from "./repo";
 import { scanRepoDetailed } from "./scanner/scan";
 import type { Alert, ChangeRecord, FixResult, Inventory } from "./types";
@@ -19,7 +20,15 @@ export interface RepoState {
   alerts: Alert[];
   changes: ChangeRecord[]; // the records behind the alerts, for the UI
   notes: string[]; // caveats to show above the inventory (unsupported language, partial scan, ...)
+  openPRs: Record<string, OpenPR>; // alert id -> our currently open fix PR for it, looked up live on GitHub
 }
+
+export interface OpenPR {
+  number: number;
+  url: string;
+}
+
+const prNumber = (url: string) => Number(url.match(/\/pull\/(\d+)/)?.[1] ?? 0);
 
 export type JobStatus = "running" | "done" | "failed";
 export type Job = FixResult & { jobId: string; status: JobStatus };
@@ -51,6 +60,23 @@ export async function scan(repoUrl: string, onLog: (s: string) => void = () => {
   const changes = await loadChanges();
   const alerts = match(inventory, changes);
   const used = new Set(alerts.map((a) => a.changeId));
+
+  // Which alerts already have an open PR on GitHub (e.g. pre-opened before a demo; none right after reset.ts).
+  const openPRs: Record<string, OpenPR> = {};
+  if (ref.owner !== "local") {
+    try {
+      const prs = await openForewarnedPRs(ref);
+      for (const a of alerts) {
+        const pr = prs.find((p) => p.branch === `forewarned/${a.changeId}`);
+        if (pr) {
+          openPRs[a.id] = { number: pr.number, url: pr.url };
+          a.status = "pr-opened";
+        }
+      }
+    } catch {
+      // No token or GitHub unavailable: scanning still works, PR badges just don't show.
+    }
+  }
   const state: RepoState = {
     id: repoId(ref.slug),
     repoUrl,
@@ -58,6 +84,7 @@ export async function scan(repoUrl: string, onLog: (s: string) => void = () => {
     alerts,
     changes: changes.filter((c) => used.has(c.id)),
     notes,
+    openPRs,
   };
   await writeJson(path.join(REPOS, `${state.id}.json`), state);
   return state;
@@ -87,10 +114,11 @@ export async function findAlert(alertId: string): Promise<{ state: RepoState; al
   return change ? { state, alert, change } : undefined;
 }
 
-async function setAlertStatus(state: RepoState, alertId: string, status: Alert["status"]) {
+async function setAlertStatus(state: RepoState, alertId: string, status: Alert["status"], prUrl?: string) {
   const fresh = (await getRepo(state.id)) ?? state;
   const a = fresh.alerts.find((x) => x.id === alertId);
   if (a) a.status = status;
+  if (prUrl) fresh.openPRs = { ...fresh.openPRs, [alertId]: { number: prNumber(prUrl), url: prUrl } };
   await writeJson(path.join(REPOS, `${fresh.id}.json`), fresh);
 }
 
@@ -136,7 +164,7 @@ export async function startFix(alertId: string, opts: FixOptions = {}): Promise<
     }
     await persist();
     // A dry run opens no PR, so the alert goes back to "open" rather than claiming one.
-    await setAlertStatus(state, alertId, job.prUrl ? "pr-opened" : job.status === "done" ? "open" : "failed");
+    await setAlertStatus(state, alertId, job.prUrl ? "pr-opened" : job.status === "done" ? "open" : "failed", job.prUrl);
   })();
 
   return jobId;
