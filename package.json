@@ -11,6 +11,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
     "@octokit/rest": "^22.0.1",
+    "freestyle": "^0.2.20",
     "next": "16.4.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",

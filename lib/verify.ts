@@ -10,30 +10,57 @@ export interface Checks {
   tsc: CheckResult;
   tests: CheckResult;
   output: { tsc: string; tests: string }; // trimmed error output, fed back to the fix agent
+  where: CheckRunner["where"];
+}
+
+// Runs shell commands from the repo root: on this machine, or inside a Freestyle VM (lib/sandbox.ts).
+export interface CheckRunner {
+  where: "local" | "freestyle";
+  run(command: string, timeoutMs: number, env?: Record<string, string>): Promise<{ ok: boolean; output: string; timedOut: boolean }>;
+  exists(relPath: string): Promise<boolean>;
+}
+
+export function localRunner(dir: string): CheckRunner {
+  return {
+    where: "local",
+    async run(command, timeoutMs, env) {
+      const r = await sh("sh", ["-c", command], { cwd: dir, timeoutMs, env });
+      return { ok: r.ok, output: r.stdout + r.stderr, timedOut: r.timedOut };
+    },
+    async exists(relPath) {
+      return existsSync(path.join(dir, relPath));
+    },
+  };
 }
 
 const NPM_DEFAULT_TEST = /no test specified/;
+const NPM_FLAGS = "--no-audit --no-fund --loglevel=error";
 
-function tail(s: string, max = 6000): string {
+export function tail(s: string, max = 6000): string {
   return s.length > max ? "…" + s.slice(-max) : s;
 }
 
-export async function installDeps(dir: string): Promise<{ ok: boolean; output: string }> {
+export async function installDeps(dir: string, runner: CheckRunner = localRunner(dir)): Promise<{ ok: boolean; output: string }> {
   if (!existsSync(path.join(dir, "package.json"))) return { ok: true, output: "no package.json" };
-  const r = await sh("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error"], { cwd: dir, timeoutMs: 240_000 });
+  const r = await runner.run(`npm install ${NPM_FLAGS}`, 240_000);
+  return { ok: r.ok, output: tail(r.output, 3000) };
+}
+
+// Refresh package-lock.json for a version bump without installing anything or running any package scripts.
+export async function updateLockfile(dir: string): Promise<{ ok: boolean; output: string }> {
+  const r = await sh("npm", ["install", "--package-lock-only", "--ignore-scripts", ...NPM_FLAGS.split(" ")], { cwd: dir, timeoutMs: 120_000 });
   return { ok: r.ok, output: tail(r.stderr || r.stdout, 3000) };
 }
 
-// `npx tsc --noEmit` and `npm test`, 120 s each, "skipped" when missing.
-export async function runChecks(dir: string): Promise<Checks> {
-  const out: Checks = { tsc: "skipped", tests: "skipped", output: { tsc: "", tests: "" } };
+// `tsc --noEmit` and `npm test`, 120 s each, "skipped" when missing.
+export async function runChecks(dir: string, runner: CheckRunner = localRunner(dir)): Promise<Checks> {
+  const out: Checks = { tsc: "skipped", tests: "skipped", output: { tsc: "", tests: "" }, where: runner.where };
 
   const hasTsconfig = existsSync(path.join(dir, "tsconfig.json"));
-  const localTsc = path.join(dir, "node_modules", ".bin", "tsc");
-  if (hasTsconfig && existsSync(localTsc)) {
-    const r = await sh(localTsc, ["--noEmit", "-p", "."], { cwd: dir, timeoutMs: 120_000 });
+  if (hasTsconfig && (await runner.exists("node_modules/.bin/tsc"))) {
+    const r = await runner.run("./node_modules/.bin/tsc --noEmit -p .", 120_000);
     out.tsc = r.ok ? "pass" : "fail";
-    out.output.tsc = r.timedOut ? "tsc timed out after 120 s" : tail(r.stdout + r.stderr);
+    out.output.tsc = r.timedOut ? "tsc timed out after 120 s" : tail(r.output);
   } else if (hasTsconfig) {
     out.output.tsc = "typescript is not installed in this repo";
   }
@@ -43,9 +70,9 @@ export async function runChecks(dir: string): Promise<Checks> {
     testScript = JSON.parse(await readFile(path.join(dir, "package.json"), "utf8"))?.scripts?.test;
   } catch {}
   if (testScript && !NPM_DEFAULT_TEST.test(testScript)) {
-    const r = await sh("npm", ["test", "--silent"], { cwd: dir, timeoutMs: 120_000, env: { CI: "true", FORCE_COLOR: "0" } });
+    const r = await runner.run("npm test --silent", 120_000, { CI: "true", FORCE_COLOR: "0", NO_COLOR: "1" });
     out.tests = r.ok ? "pass" : "fail";
-    out.output.tests = r.timedOut ? "tests timed out after 120 s" : tail(r.stdout + r.stderr);
+    out.output.tests = r.timedOut ? "tests timed out after 120 s" : tail(r.output);
   }
   return out;
 }

@@ -3,7 +3,8 @@ import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { assertPushable, openOrUpdatePR } from "../github";
 import { gitAuthArgs, parseRepo, sh } from "../repo";
-import { exercisingTests, installDeps, runChecks, verificationLabel, type Checks } from "../verify";
+import { runChecksIsolated, sandboxEnabled } from "../sandbox";
+import { exercisingTests, installDeps, runChecks, updateLockfile, verificationLabel, type Checks } from "../verify";
 import type { Alert, ChangeRecord, CheckResult, FixResult, Verification } from "../types";
 
 const MAX_ATTEMPTS = 3; // first try + 2 retries
@@ -128,7 +129,7 @@ const LABEL_TEXT: Record<Verification, string> = {
   unverified: "Neither the type check nor an exercising test passed. Review carefully.",
 };
 
-function prBody(alert: Alert, change: ChangeRecord, r: FixResult, evidence: string[]): string {
+function prBody(alert: Alert, change: ChangeRecord, r: FixResult, evidence: string[], checksWhere: Checks["where"]): string {
   const icon = (c: CheckResult) => (c === "pass" ? "✅ pass" : c === "fail" ? "❌ fail" : "➖ skipped");
   return [
     `## ${change.title}`,
@@ -148,6 +149,10 @@ function prBody(alert: Alert, change: ChangeRecord, r: FixResult, evidence: stri
     `| Check | Before | After |`,
     `|---|---|---|`,
     ...r.checks.map((c) => `| ${c.name === "tsc" ? "`tsc --noEmit`" : "`npm test`"} | ${icon(c.before)} | ${icon(c.after)} |`),
+    ``,
+    checksWhere === "freestyle"
+      ? `Install, type check and tests ran in an isolated [Freestyle](https://freestyle.sh) VM, not on our machine.`
+      : `Checks ran locally.`,
     ``,
     `### Verification: \`${r.verification}\``,
     LABEL_TEXT[r.verification],
@@ -193,12 +198,18 @@ export async function fixAlert(
       base = (await assertPushable(ref)).defaultBranch;
     }
 
-    log("Installing dependencies");
-    const inst = await installDeps(dir);
-    if (!inst.ok) log(`npm install reported errors: ${inst.output.split("\n")[0]}`);
+    // Sandbox mode: the repo's install scripts, tsc and tests run only inside a Freestyle VM, never here.
+    const sandbox = sandboxEnabled();
+    const where = sandbox ? " in an isolated Freestyle VM" : "";
+    const check = () => (sandbox ? runChecksIsolated(dir, log) : runChecks(dir));
+    if (!sandbox) {
+      log("Installing dependencies");
+      const inst = await installDeps(dir);
+      if (!inst.ok) log(`npm install reported errors: ${inst.output.split("\n")[0]}`);
+    }
 
-    log("Running checks before the change (tsc, tests)");
-    const before = await runChecks(dir);
+    log(`Running checks before the change${where} (tsc, tests)`);
+    const before = await check();
     log(`Before: tsc ${before.tsc}, tests ${before.tests}`);
 
     await sh("git", ["checkout", "-B", branch], { cwd: dir });
@@ -232,14 +243,14 @@ export async function fixAlert(
 
       const pkgChanged = (await sh("git", ["diff", "--quiet", "HEAD", "--", "package.json"], { cwd: dir })).code !== 0;
       if (pkgChanged) {
-        log("package.json changed, reinstalling dependencies");
-        const r = await installDeps(dir);
-        if (!r.ok) log(`npm install reported errors: ${r.output.split("\n")[0]}`);
+        log(sandbox ? "package.json changed, updating the lockfile (no package scripts run locally)" : "package.json changed, reinstalling dependencies");
+        const r = sandbox ? await updateLockfile(dir) : await installDeps(dir);
+        if (!r.ok) log(`npm reported errors: ${r.output.split("\n")[0]}`);
         result.filesChanged = await changedFiles(dir);
       }
 
-      log("Running checks after the change (tsc, tests)");
-      after = await runChecks(dir);
+      log(`Running checks after the change${where} (tsc, tests)`);
+      after = await check();
       log(`After: tsc ${after.tsc}, tests ${after.tests}`);
 
       const typeOk = after.tsc === "pass" || (after.tsc === "skipped" && after.tests !== "fail");
@@ -288,7 +299,7 @@ export async function fixAlert(
       branch,
       base,
       title: `[Forewarned] ${change.title}`,
-      body: prBody(alert, change, result, evidence),
+      body: prBody(alert, change, result, evidence, after.where),
       labels: ["forewarned", `verified: ${result.verification}`],
     });
     log(`PR opened: ${result.prUrl}`);
