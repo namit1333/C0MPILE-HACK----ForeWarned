@@ -98,7 +98,7 @@ export default function ConnectPage() {
           ))}
           <Link
             href="/repo/A5bhinav__openai-api-example"
-            className="ml-auto font-mono text-xs text-zinc-400 underline hover:text-teal-400"
+            className="ml-auto font-mono text-xs text-teal-400 underline hover:text-teal-300"
           >
             Open pre-scanned dashboard →
           </Link>

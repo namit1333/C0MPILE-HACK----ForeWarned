@@ -12,6 +12,8 @@ import type { Alert, ChangeRecord, FixResult, Inventory, Verification } from "./
 const DATA = path.join(process.cwd(), "data");
 const REPOS = path.join(DATA, "repos");
 const JOBS = path.join(DATA, "jobs");
+// Committed cold-start scans for the demo path (data/repos is gitignored).
+const FIXTURE_REPOS = path.join(process.cwd(), "fixtures", "repos");
 
 export interface RepoState {
   id: string; // "owner__name", URL-safe
@@ -95,21 +97,32 @@ export async function scan(repoUrl: string, onLog: (s: string) => void = () => {
 // GET /api/repos/[id]
 export async function getRepo(id: string): Promise<RepoState | undefined> {
   if (!/^[\w.-]+$/.test(id) || id.includes("..")) return undefined; // ids come from URLs
-  return readJson<RepoState>(path.join(REPOS, `${id}.json`));
+  return (
+    (await readJson<RepoState>(path.join(REPOS, `${id}.json`))) ??
+    (await readJson<RepoState>(path.join(FIXTURE_REPOS, `${id}.json`)))
+  );
 }
 
 export async function findAlert(alertId: string): Promise<{ state: RepoState; alert: Alert; change: ChangeRecord } | undefined> {
   // Look the alert up instead of parsing its id: repo names can contain "--".
-  let files: string[] = [];
-  try {
-    files = (await readdir(REPOS)).filter((f) => f.endsWith(".json"));
-  } catch {}
+  // Prefer live scans in data/repos; fall back to committed fixtures/repos for cold demos.
+  const dirs = [REPOS, FIXTURE_REPOS];
   let state: RepoState | undefined;
   let alert: Alert | undefined;
-  for (const f of files) {
-    const s = await readJson<RepoState>(path.join(REPOS, f));
-    alert = s?.alerts.find((a) => a.id === alertId);
-    if (alert) { state = s; break; }
+  for (const dir of dirs) {
+    let files: string[] = [];
+    try {
+      files = (await readdir(dir)).filter((f) => f.endsWith(".json"));
+    } catch {}
+    for (const f of files) {
+      const s = await readJson<RepoState>(path.join(dir, f));
+      alert = s?.alerts.find((a) => a.id === alertId);
+      if (alert) {
+        state = s;
+        break;
+      }
+    }
+    if (state) break;
   }
   if (!state || !alert) return undefined;
   const change = state.changes.find((c) => c.id === alert.changeId) ?? (await loadChanges()).find((c) => c.id === alert.changeId);

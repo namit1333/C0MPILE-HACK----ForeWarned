@@ -33,6 +33,7 @@ export default function RepoDashboard({ params }: { params: Promise<{ id: string
   const [state, setState] = useState<RepoState | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ openai: true });
   const [error, setError] = useState<string | null>(null);
+  const [rescanning, setRescanning] = useState(false);
 
   useEffect(() => {
     fetch(`/api/repos/${id}`)
@@ -40,11 +41,32 @@ export default function RepoDashboard({ params }: { params: Promise<{ id: string
         const data = await r.json();
         if (!r.ok) throw new Error(data.error ?? "Failed to load repo");
         setState(data);
+        setError(null);
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [id]);
 
-  if (error) {
+  async function handleRescan() {
+    if (!state || rescanning) return;
+    setRescanning(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repoUrl: state.repoUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Rescan failed");
+      setState(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRescanning(false);
+    }
+  }
+
+  if (error && !state) {
     return (
       <main className="mx-auto max-w-5xl px-6 py-16">
         <p className="font-mono text-rose-400">{error}</p>
@@ -97,17 +119,28 @@ export default function RepoDashboard({ params }: { params: Promise<{ id: string
           <span className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs text-zinc-400">
             Scanned {new Date(state.inventory.scannedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </span>
-          <Link
-            href="/"
-            className="inline-flex h-11 items-center rounded-lg border border-zinc-700 bg-zinc-900 px-4 text-sm font-semibold text-zinc-100 hover:bg-zinc-800"
+          <button
+            type="button"
+            onClick={handleRescan}
+            disabled={rescanning}
+            className="inline-flex h-11 items-center rounded-lg border border-zinc-700 bg-zinc-900 px-4 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 disabled:opacity-50"
           >
-            Rescan
-          </Link>
+            {rescanning ? "Scanning..." : "Check now"}
+          </button>
         </div>
       </div>
 
+      {error && <p className="mb-4 font-mono text-sm text-rose-400">{error}</p>}
+
+      {state.notes && state.notes.length > 0 && (
+        <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 font-mono text-sm text-amber-200">
+          {state.notes.map((n) => (
+            <p key={n}>{n}</p>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Inventory Column */}
         <section className="rounded-xl border border-zinc-800 bg-zinc-950 lg:col-span-5">
           <div className="border-b border-zinc-800 px-5 py-4">
             <h2 className="text-lg font-bold text-zinc-100">API inventory</h2>
@@ -166,7 +199,6 @@ export default function RepoDashboard({ params }: { params: Promise<{ id: string
           </div>
         </section>
 
-        {/* Timeline Column */}
         <section className="rounded-xl border border-zinc-800 bg-zinc-950 lg:col-span-7">
           <div className="border-b border-zinc-800 px-5 py-4">
             <h2 className="text-lg font-bold text-zinc-100">What&apos;s coming</h2>
@@ -181,6 +213,17 @@ export default function RepoDashboard({ params }: { params: Promise<{ id: string
                   : alert.type === "deprecation"
                     ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
                     : "border-sky-500/40 bg-sky-500/15 text-sky-300";
+
+              const statusLabel =
+                alert.status === "fixing"
+                  ? "Fixing..."
+                  : alert.status === "failed"
+                    ? "Fix failed"
+                    : pr
+                      ? `✓ PR #${pr.number} opened`
+                      : alert.status === "pr-opened"
+                        ? "✓ PR opened"
+                        : null;
 
               return (
                 <Link
@@ -201,9 +244,17 @@ export default function RepoDashboard({ params }: { params: Promise<{ id: string
                         </span>
                       )}
                     </div>
-                    {pr && (
-                      <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-3 py-0.5 font-mono text-xs text-emerald-300">
-                        ✓ PR #{pr.number} opened
+                    {statusLabel && (
+                      <span
+                        className={`rounded-full border px-3 py-0.5 font-mono text-xs ${
+                          alert.status === "failed"
+                            ? "border-rose-500/40 bg-rose-500/15 text-rose-300"
+                            : alert.status === "fixing"
+                              ? "border-teal-500/40 bg-teal-500/15 text-teal-300"
+                              : "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                        }`}
+                      >
+                        {statusLabel}
                       </span>
                     )}
                   </div>

@@ -1,0 +1,213 @@
+{
+  "id": "A5bhinav__openai-api-example",
+  "repoUrl": "https://github.com/A5bhinav/openai-api-example",
+  "inventory": {
+    "repo": "A5bhinav/openai-api-example",
+    "scannedAt": "2026-10-17T21:52:51.951Z",
+    "dependencies": [
+      {
+        "provider": "openai",
+        "package": "openai",
+        "version": "3.2.1",
+        "callSites": [
+          {
+            "file": "src/app.ts",
+            "line": 2,
+            "symbol": "Configuration,OpenAIApi",
+            "snippet": "import {Configuration, OpenAIApi} from \"openai\";",
+            "kind": "import"
+          },
+          {
+            "file": "src/app.ts",
+            "line": 14,
+            "symbol": "new OpenAIApi",
+            "snippet": "export const openai = new OpenAIApi(new Configuration({",
+            "kind": "sdk-call"
+          },
+          {
+            "file": "src/app.ts",
+            "line": 14,
+            "symbol": "new Configuration",
+            "snippet": "export const openai = new OpenAIApi(new Configuration({",
+            "kind": "sdk-call"
+          },
+          {
+            "file": "src/commands/chat.ts",
+            "line": 4,
+            "symbol": "ChatCompletionRequestMessage,ChatCompletionResponseMessage",
+            "snippet": "import {ChatCompletionRequestMessage, ChatCompletionResponseMessage} from \"openai\";",
+            "kind": "import"
+          },
+          {
+            "file": "src/commands/chat.ts",
+            "line": 10,
+            "symbol": "gpt-3.5-turbo",
+            "snippet": "const model: string = \"gpt-3.5-turbo\";",
+            "kind": "model-string"
+          },
+          {
+            "file": "src/commands/chat.ts",
+            "line": 34,
+            "symbol": "OpenAIApi.createChatCompletion",
+            "snippet": "const res = await openai.createChatCompletion({",
+            "kind": "sdk-call"
+          },
+          {
+            "file": "src/commands/image.ts",
+            "line": 14,
+            "symbol": "OpenAIApi.createImage",
+            "snippet": "const res = await openai.createImage({",
+            "kind": "sdk-call"
+          }
+        ]
+      }
+    ]
+  },
+  "alerts": [
+    {
+      "id": "A5bhinav__openai-api-example--openai-legacy-models-2026-10-23",
+      "repo": "A5bhinav/openai-api-example",
+      "changeId": "openai-legacy-models-2026-10-23",
+      "type": "deprecation",
+      "deadline": "2026-10-23",
+      "callSites": [
+        {
+          "file": "src/commands/chat.ts",
+          "line": 10,
+          "symbol": "gpt-3.5-turbo",
+          "snippet": "const model: string = \"gpt-3.5-turbo\";",
+          "kind": "model-string"
+        }
+      ],
+      "status": "open"
+    },
+    {
+      "id": "A5bhinav__openai-api-example--openai-node-v4",
+      "repo": "A5bhinav/openai-api-example",
+      "changeId": "openai-node-v4",
+      "type": "breaking",
+      "callSites": [
+        {
+          "file": "src/app.ts",
+          "line": 2,
+          "symbol": "Configuration,OpenAIApi",
+          "snippet": "import {Configuration, OpenAIApi} from \"openai\";",
+          "kind": "import"
+        },
+        {
+          "file": "src/app.ts",
+          "line": 14,
+          "symbol": "new OpenAIApi",
+          "snippet": "export const openai = new OpenAIApi(new Configuration({",
+          "kind": "sdk-call"
+        },
+        {
+          "file": "src/app.ts",
+          "line": 14,
+          "symbol": "new Configuration",
+          "snippet": "export const openai = new OpenAIApi(new Configuration({",
+          "kind": "sdk-call"
+        },
+        {
+          "file": "src/commands/chat.ts",
+          "line": 34,
+          "symbol": "OpenAIApi.createChatCompletion",
+          "snippet": "const res = await openai.createChatCompletion({",
+          "kind": "sdk-call"
+        },
+        {
+          "file": "src/commands/image.ts",
+          "line": 14,
+          "symbol": "OpenAIApi.createImage",
+          "snippet": "const res = await openai.createImage({",
+          "kind": "sdk-call"
+        }
+      ],
+      "status": "open"
+    },
+    {
+      "id": "A5bhinav__openai-api-example--openai-responses-api",
+      "repo": "A5bhinav/openai-api-example",
+      "changeId": "openai-responses-api",
+      "type": "feature",
+      "callSites": [
+        {
+          "file": "src/commands/chat.ts",
+          "line": 34,
+          "symbol": "OpenAIApi.createChatCompletion",
+          "snippet": "const res = await openai.createChatCompletion({",
+          "kind": "sdk-call"
+        }
+      ],
+      "status": "open"
+    }
+  ],
+  "changes": [
+    {
+      "id": "openai-legacy-models-2026-10-23",
+      "provider": "openai",
+      "type": "deprecation",
+      "title": "Legacy OpenAI models shut down on Oct 23, 2026",
+      "summary": "OpenAI is removing a batch of older models from the API on October 23, 2026, including gpt-3.5-turbo, gpt-4, gpt-4-turbo, gpt-4o-2024-05-13, o1, o3-mini and o4-mini. Requests to them will fail after that date. Each has a named substitute model.",
+      "effectiveDate": "2026-10-23",
+      "sourceUrl": "https://developers.openai.com/api/docs/deprecations",
+      "affects": {
+        "patterns": [
+          "^gpt-3\\.5-turbo(-0125)?$",
+          "^gpt-4(-0613)?$",
+          "^gpt-4-1106-preview$",
+          "^gpt-4-turbo(-2024-04-09)?$",
+          "^gpt-4\\.1-nano(-2025-04-14)?$",
+          "^gpt-4o-2024-05-13$",
+          "^gpt-image-1$",
+          "^o1(-2024-12-17)?$",
+          "^o1-pro(-2025-03-19)?$",
+          "^o3-mini(-2025-01-31)?$",
+          "^o4-mini(-2025-04-16)?$"
+        ]
+      },
+      "migration": "Replace each retiring model id string with its substitute from OpenAI's deprecations page (notice of 2026-04-22, 'Legacy GPT model snapshots'):\n- gpt-3.5-turbo, gpt-3.5-turbo-0125 -> gpt-5.6-terra\n- gpt-4, gpt-4-0613, gpt-4-1106-preview, gpt-4-turbo, gpt-4-turbo-2024-04-09 -> gpt-5.6-sol\n- gpt-4o-2024-05-13 -> gpt-5.6-sol\n- gpt-4.1-nano, gpt-4.1-nano-2025-04-14 -> gpt-5.6-luna\n- o1, o1-2024-12-17, o3-mini, o3-mini-2025-01-31 -> gpt-5.6-sol\n- o1-pro, o1-pro-2025-03-19 -> gpt-5.6-sol (with reasoning mode pro)\n- o4-mini, o4-mini-2025-04-16 -> gpt-5.6-terra\n- gpt-image-1 -> gpt-image-2.5-flare\nChange only the model id strings (in code, config files or env defaults). Do not change the SDK version, request parameters or response handling. If a string type or union restricts allowed model ids, add the new id to it."
+    },
+    {
+      "id": "openai-node-v4",
+      "provider": "openai",
+      "type": "breaking",
+      "title": "OpenAI Node SDK v3 → v4",
+      "summary": "openai v4 is a rewrite: Configuration and OpenAIApi are gone, methods moved to resource namespaces, and responses are no longer wrapped in .data.",
+      "sourceUrl": "https://github.com/openai/openai-node/discussions/217",
+      "affects": {
+        "package": "openai",
+        "versionRange": "<4.0.0",
+        "symbols": [
+          "Configuration",
+          "OpenAIApi",
+          "createChatCompletion",
+          "createCompletion",
+          "createEmbedding",
+          "createImage"
+        ]
+      },
+      "migration": "1. In package.json set \"openai\" to \"^4.104.0\".\n2. Replace `import { Configuration, OpenAIApi } from \"openai\"` with `import OpenAI from \"openai\"`, and `new OpenAIApi(new Configuration({ apiKey }))` with `new OpenAI({ apiKey })`.\n3. `openai.createChatCompletion(params)` -> `openai.chat.completions.create(params)`; `createCompletion` -> `completions.create`; `createEmbedding` -> `embeddings.create`; `createImage` -> `images.generate`.\n4. Responses are no longer wrapped: `response.data.choices` -> `response.choices`, `response.data.data` -> `response.data`.\n5. Message param types: use `OpenAI.Chat.ChatCompletionMessageParam` instead of `ChatCompletionRequestMessage`."
+    },
+    {
+      "id": "openai-responses-api",
+      "provider": "openai",
+      "type": "feature",
+      "title": "Adopt OpenAI's Responses API for chat calls",
+      "summary": "OpenAI now recommends the Responses API over Chat Completions for all new work: better results from reasoning models, lower cost through better cache use, and built-in tools and state. Chat Completions still works, so this is an upgrade you can take, not a fix you need.",
+      "sourceUrl": "https://developers.openai.com/api/docs/guides/migrate-to-responses",
+      "affects": {
+        "package": "openai",
+        "symbols": [
+          "createChatCompletion"
+        ],
+        "patterns": [
+          "chat\\.completions\\.create"
+        ]
+      },
+      "migration": "Move chat calls from Chat Completions to the Responses API, following OpenAI's migration guide.\n1. The Responses API needs openai-node v4. If package.json has \"openai\" below 4.104.0, set it to \"^4.104.0\" and apply the v4 client changes first: `import OpenAI from \"openai\"`, `new OpenAI({ apiKey })` instead of `new OpenAIApi(new Configuration(...))`, and no `.data` wrapper on responses.\n2. Replace `openai.chat.completions.create({ model, messages })` (or v3 `openai.createChatCompletion(...)`) with `openai.responses.create({ model, instructions, input })`.\n3. Move any `{ role: \"system\" }` message into the top-level `instructions` string. Pass the remaining user/assistant messages as the `input` array (each item `{ role, content }` with string content); a single user message can be passed as a plain string.\n4. Read the reply text from `response.output_text` instead of `choices[0].message.content`. Where code stores the assistant message for conversation history, store `{ role: \"assistant\", content: response.output_text }`.\n5. Message types: use `OpenAI.Responses.ResponseInputItem` (or `{ role: \"user\" | \"assistant\"; content: string }`) instead of Chat Completions message types.\nKeep model ids, prompts and every non-chat call (images, embeddings, audio) unchanged. Do not add tools, streaming or previous_response_id."
+    }
+  ],
+  "notes": [],
+  "openPRs": {}
+}

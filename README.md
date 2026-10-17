@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Forewarned
 
-## Getting Started
+Dependabot tells you a new version exists. We tell you what's about to break — and what you're missing — before it happens.
 
-First, run the development server:
+Hackathon prototype (YC RFS Fall 2026, Self-Maintaining APIs): connect a GitHub repo, inventory third-party API call sites, match provider change records, and open a verified fix PR on a fork you own.
+
+## Demo path (cold start)
 
 ```bash
+cp .env.example .env.local   # add GITHUB_TOKEN + ANTHROPIC_API_KEY (or use `gh` + claude/codex CLI)
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. **Open pre-scanned dashboard →** — loads the committed scan for `A5bhinav/openai-api-example` (no clone required).
+2. Pick an alert under **What's coming** — call sites are live from the inventory.
+3. **Open fix PR** — runs the agent, typecheck/tests, and opens a PR on a pushable fork. Needs secrets above.
+4. Or hit **Scan** / **Check now** to re-scan any public GitHub repo.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Refresh the fixture after changing scanners or change records:
 
-## Learn More
+```bash
+npm run seed-demo
+```
 
-To learn more about Next.js, take a look at the following resources:
+## What it does
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Step | Where |
+|------|--------|
+| Clone → scan → match → save | `POST /api/scan` → `data/repos/` (fixtures in `fixtures/repos/` for cold start) |
+| Dashboard | `/repo/<owner__name>` |
+| Fix job + live log | `POST /api/alerts/<id>/fix` → poll `/api/jobs/<id>` |
+| Change records | `data/changes/*.json` |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+PRs only go to forks you own (or `FOREWARNED_ALLOWED_OWNERS`). Verification labels: `tests-exercise-call` | `type-checked` | `unverified`.
 
-## Deploy on Vercel
+## CLI
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npx tsx scripts/run.ts https://github.com/A5bhinav/openai-api-example --scan-only
+npx tsx scripts/run.ts https://github.com/YOUR/fork --dry-run --change openai-node-v4
+npm run seed-demo
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Stack
+
+Next.js App Router, TypeScript, Tailwind, ts-morph, Octokit, Zod. Scripts via `npx tsx`.
