@@ -3,7 +3,7 @@ import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { assertPushable, openOrUpdatePR } from "../github";
 import { gitAuthArgs, parseRepo, sh } from "../repo";
-import { installDeps, runChecks, verificationLabel, type Checks } from "../verify";
+import { exercisingTests, installDeps, runChecks, verificationLabel, type Checks } from "../verify";
 import type { Alert, ChangeRecord, CheckResult, FixResult, Verification } from "../types";
 
 const MAX_ATTEMPTS = 3; // first try + 2 retries
@@ -123,12 +123,12 @@ function checkErrors(c: Checks, before: Checks): string {
 }
 
 const LABEL_TEXT: Record<Verification, string> = {
-  "tests-exercise-call": "A test that imports the changed code (without mocking the SDK) ran and passed.",
-  "type-checked": "`tsc --noEmit` passed. No test exercises the changed call without mocking the SDK, so runtime behaviour is not proven.",
+  "tests-exercise-call": "A passing test calls a function containing a changed SDK call, without mocking the SDK:",
+  "type-checked": "`tsc --noEmit` passed. No passing test calls the changed code without mocking the SDK, so runtime behaviour is not proven.",
   unverified: "Neither the type check nor an exercising test passed. Review carefully.",
 };
 
-function prBody(alert: Alert, change: ChangeRecord, r: FixResult): string {
+function prBody(alert: Alert, change: ChangeRecord, r: FixResult, evidence: string[]): string {
   const icon = (c: CheckResult) => (c === "pass" ? "✅ pass" : c === "fail" ? "❌ fail" : "➖ skipped");
   return [
     `## ${change.title}`,
@@ -151,6 +151,7 @@ function prBody(alert: Alert, change: ChangeRecord, r: FixResult): string {
     ``,
     `### Verification: \`${r.verification}\``,
     LABEL_TEXT[r.verification],
+    ...evidence.map((e) => `- ${e}`),
     ``,
     `Attempts: ${r.attempts}`,
     ``,
@@ -256,12 +257,13 @@ export async function fixAlert(
       { name: "tests", before: before.tests, after: after.tests },
     ];
     result.verification = await verificationLabel(dir, result.filesChanged, change.affects.package, after);
+    const evidence = result.verification === "tests-exercise-call" ? await exercisingTests(dir, result.filesChanged, change.affects.package) : [];
 
     if (!passed) {
       log(`Failed: the type check still fails after ${result.attempts} attempts. No PR opened.`);
       return result;
     }
-    log(`Verification: ${result.verification}`);
+    log(`Verification: ${result.verification}${evidence.length ? ` (${evidence.join("; ")})` : ""}`);
 
     await sh("git", ["add", "-A", "--", ...result.filesChanged], { cwd: dir });
     const commit = await sh(
@@ -286,7 +288,7 @@ export async function fixAlert(
       branch,
       base,
       title: `[Forewarned] ${change.title}`,
-      body: prBody(alert, change, result),
+      body: prBody(alert, change, result, evidence),
       labels: ["forewarned", `verified: ${result.verification}`],
     });
     log(`PR opened: ${result.prUrl}`);

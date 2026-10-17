@@ -1,7 +1,9 @@
 import { readFile, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { Node, Project, SyntaxKind } from "ts-morph";
 import { sh } from "./repo";
+import { scanRepo } from "./scanner/scan";
 import type { CheckResult, Verification } from "./types";
 
 export interface Checks {
@@ -64,8 +66,102 @@ async function findTestFiles(dir: string, root = dir, out: string[] = []): Promi
 }
 
 const stripExt = (p: string) => p.replace(/\.[cm]?[jt]sx?$/, "").replace(/\/index$/, "");
+const resolveSpec = (fromFile: string, spec: string) => stripExt(path.normalize(path.join(path.dirname(fromFile), spec)));
+const MOCK_RE = /\b(?:jest|vi)\.(?:do)?[mM]ock\(\s*["'`]([^"'`]+)["'`]/g;
+// A skipped test still lets `npm test` pass, so files that can skip prove nothing.
+const SKIP_RE = /\b(?:it|test|describe)\.(?:skip|skipIf|runIf|todo)\b|\b(?:xit|xtest|xdescribe)\s*\(/;
 
-// "tests-exercise-call" only if a passing test imports a changed file and doesn't mock the SDK;
+// Evidence that a passing test really runs a changed SDK call: the test imports, from a changed file,
+// a function that contains an SDK call site (or calls a local helper that does), calls it, and mocks
+// neither the SDK nor a repo module that uses it. Returns lines like "test/chat.test.ts calls ask() from src/chat.ts".
+export async function exercisingTests(dir: string, filesChanged: string[], pkg: string | undefined): Promise<string[]> {
+  const tests = await findTestFiles(dir);
+  if (!tests.length) return [];
+  const testKeys = new Set(tests.map(stripExt));
+  const changed = new Set(filesChanged.map(stripExt));
+
+  // Re-scan the patched code so line numbers reflect the new call sites.
+  const inv = await scanRepo(dir, "verify");
+  const deps = inv.dependencies.filter((d) => (pkg ? d.package === pkg : true));
+  const sdkPackages = new Set(inv.dependencies.flatMap((d) => (d.package ? [d.package] : [])));
+  const sdkFiles = new Set(deps.flatMap((d) => d.callSites.map((c) => stripExt(c.file))));
+  const sitesByFile = new Map<string, { file: string; lines: number[] }>();
+  for (const c of deps.flatMap((d) => d.callSites)) {
+    const key = stripExt(c.file);
+    if (c.kind === "import" || !changed.has(key) || testKeys.has(key)) continue;
+    const e = sitesByFile.get(key) ?? { file: c.file, lines: [] };
+    e.lines.push(c.line);
+    sitesByFile.set(key, e);
+  }
+  if (!sitesByFile.size) return [];
+
+  // Exported names in each changed file whose body holds a call site, directly or via a local helper.
+  const project = new Project({ skipAddingFilesFromTsConfig: true, skipFileDependencyResolution: true, compilerOptions: { allowJs: true } });
+  const hotExports = new Map<string, Set<string>>();
+  for (const [key, { file, lines }] of sitesByFile) {
+    let sf;
+    try {
+      sf = project.addSourceFileAtPath(path.join(dir, file));
+    } catch {
+      continue;
+    }
+    const contains = (n: Node) => lines.some((l) => l >= n.getStartLineNumber() && l <= n.getEndLineNumber());
+    const helpers = new Set<string>();
+    for (const fn of [...sf.getFunctions(), ...sf.getVariableDeclarations()]) {
+      const name = fn.getName();
+      if (name && contains(fn)) helpers.add(name);
+    }
+    const callsHelper = (n: Node) => [...helpers].some((h) => new RegExp(`\\b${h}\\s*\\(`).test(n.getText()));
+    const names = new Set<string>();
+    for (const [name, decls] of sf.getExportedDeclarations()) {
+      if (decls.some((d) => d.getSourceFile() === sf && (contains(d) || callsHelper(d)))) names.add(name);
+    }
+    if (names.size) hotExports.set(key, names);
+  }
+  if (!hotExports.size) return [];
+
+  const evidence: string[] = [];
+  for (const t of tests) {
+    const src = await readFile(path.join(dir, t), "utf8");
+    const mocked = [...src.matchAll(MOCK_RE)].map((m) => m[1]);
+    const mocksSdk = mocked.some((spec) => sdkPackages.has(spec) || spec === pkg || (spec.startsWith(".") && sdkFiles.has(resolveSpec(t, spec))));
+    if (mocksSdk || SKIP_RE.test(src)) continue;
+
+    let sf;
+    try {
+      sf = project.createSourceFile(path.join(dir, `__verify__${t.replace(/[\\/]/g, "_")}`), src, { overwrite: true });
+    } catch {
+      continue;
+    }
+    const callable = new Map<string, { name: string; from: string }>(); // expression text -> export it reaches
+    for (const imp of sf.getImportDeclarations()) {
+      const spec = imp.getModuleSpecifierValue();
+      if (!spec.startsWith(".") || imp.isTypeOnly()) continue;
+      const key = resolveSpec(t, spec);
+      const names = hotExports.get(key);
+      if (!names) continue;
+      const from = sitesByFile.get(key)!.file;
+      const def = imp.getDefaultImport();
+      if (def && names.has("default")) callable.set(def.getText(), { name: "default", from });
+      for (const n of imp.getNamedImports()) {
+        if (!n.isTypeOnly() && names.has(n.getName())) callable.set(n.getAliasNode()?.getText() ?? n.getName(), { name: n.getName(), from });
+      }
+      const ns = imp.getNamespaceImport();
+      if (ns) for (const name of names) callable.set(`${ns.getText()}.${name}`, { name, from });
+    }
+    if (!callable.size) continue;
+    for (const call of [...sf.getDescendantsOfKind(SyntaxKind.CallExpression), ...sf.getDescendantsOfKind(SyntaxKind.NewExpression)]) {
+      const hit = callable.get(call.getExpression().getText());
+      if (hit) {
+        evidence.push(`${t} calls ${hit.name}() from ${hit.from}`);
+        break;
+      }
+    }
+  }
+  return evidence;
+}
+
+// "tests-exercise-call" only when exercisingTests finds evidence and the tests passed;
 // else "type-checked" if tsc passed; else "unverified".
 export async function verificationLabel(
   dir: string,
@@ -73,18 +169,7 @@ export async function verificationLabel(
   pkg: string | undefined,
   after: Pick<Checks, "tsc" | "tests">,
 ): Promise<Verification> {
-  if (after.tests === "pass" && after.tsc !== "fail") {
-    const changed = new Set(filesChanged.map(stripExt));
-    const mockRe = pkg
-      ? new RegExp(`(jest|vi)\\.(do)?[mM]ock\\(\\s*["'\`]${pkg.replace(/[/@.]/g, (c) => `\\${c}`)}["'\`]`)
-      : null;
-    for (const t of await findTestFiles(dir)) {
-      const src = await readFile(path.join(dir, t), "utf8");
-      if (mockRe?.test(src)) continue;
-      const specs = [...src.matchAll(/(?:from\s+|import\(\s*|require\(\s*)["'](\.{1,2}\/[^"']+)["']/g)].map((m) => m[1]);
-      const hits = specs.some((s) => changed.has(stripExt(path.normalize(path.join(path.dirname(t), s)))));
-      if (hits) return "tests-exercise-call";
-    }
-  }
-  return after.tsc === "pass" ? "type-checked" : "unverified";
+  const fallback: Verification = after.tsc === "pass" ? "type-checked" : "unverified";
+  if (after.tests !== "pass" || after.tsc === "fail") return fallback;
+  return (await exercisingTests(dir, filesChanged, pkg)).length ? "tests-exercise-call" : fallback;
 }
