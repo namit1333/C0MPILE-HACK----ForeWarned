@@ -59,8 +59,11 @@ function patternMatches(site: CallSite, patterns: RegExp[]): boolean {
   return patterns.some((re) => re.test(site.symbol) || re.test(site.snippet));
 }
 
+// URL-safe ids. A repo "owner/name" becomes "owner__name"; an alert is "<repo id>--<change id>".
+export const repoId = (slug: string) => slug.replace("/", "__");
+
 export function alertId(repo: string, changeId: string): string {
-  return `${repo.replace(/[^\w.-]+/g, "_")}--${changeId}`;
+  return `${repoId(repo)}--${changeId}`;
 }
 
 export function match(inventory: Inventory, changes: ChangeRecord[]): Alert[] {

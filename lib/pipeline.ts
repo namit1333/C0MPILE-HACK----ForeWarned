@@ -1,9 +1,9 @@
 // Glue for the API routes: each function maps to one route. Runtime state is JSON in data/.
-import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile, rename } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fixAlert, type FixOptions } from "./agent/fix";
-import { loadChanges, match } from "./matcher";
+import { loadChanges, match, repoId } from "./matcher";
 import { cloneRepo, parseRepo } from "./repo";
 import { scanRepo } from "./scanner/scan";
 import type { Alert, ChangeRecord, FixResult, Inventory } from "./types";
@@ -23,7 +23,7 @@ export interface RepoState {
 export type JobStatus = "running" | "done" | "failed";
 export type Job = FixResult & { jobId: string; status: JobStatus };
 
-export const repoId = (slug: string) => slug.replace("/", "__");
+export { repoId };
 
 async function writeJson(file: string, data: unknown) {
   await mkdir(path.dirname(file), { recursive: true });
@@ -67,9 +67,18 @@ export async function getRepo(id: string): Promise<RepoState | undefined> {
 }
 
 export async function findAlert(alertId: string): Promise<{ state: RepoState; alert: Alert; change: ChangeRecord } | undefined> {
-  const [repoPart] = alertId.split("--");
-  const state = await getRepo(repoPart);
-  const alert = state?.alerts.find((a) => a.id === alertId);
+  // Look the alert up instead of parsing its id: repo names can contain "--".
+  let files: string[] = [];
+  try {
+    files = (await readdir(REPOS)).filter((f) => f.endsWith(".json"));
+  } catch {}
+  let state: RepoState | undefined;
+  let alert: Alert | undefined;
+  for (const f of files) {
+    const s = await readJson<RepoState>(path.join(REPOS, f));
+    alert = s?.alerts.find((a) => a.id === alertId);
+    if (alert) { state = s; break; }
+  }
   if (!state || !alert) return undefined;
   const change = state.changes.find((c) => c.id === alert.changeId) ?? (await loadChanges()).find((c) => c.id === alert.changeId);
   return change ? { state, alert, change } : undefined;
