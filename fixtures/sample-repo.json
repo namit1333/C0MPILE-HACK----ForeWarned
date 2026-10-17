@@ -1,0 +1,153 @@
+{
+  "id": "demo__forewarned-sample",
+  "repoUrl": "https://github.com/demo/forewarned-sample",
+  "inventory": {
+    "repo": "demo/forewarned-sample",
+    "scannedAt": "2026-10-17T18:00:00.000Z",
+    "dependencies": [
+      {
+        "provider": "openai",
+        "package": "openai",
+        "version": "3.3.0",
+        "callSites": [
+          {
+            "file": "src/chat.ts",
+            "line": 1,
+            "symbol": "Configuration",
+            "snippet": "import { Configuration, OpenAIApi } from \"openai\";",
+            "kind": "import"
+          },
+          {
+            "file": "src/chat.ts",
+            "line": 8,
+            "symbol": "OpenAIApi.createChatCompletion",
+            "snippet": "const res = await openai.createChatCompletion({ model: \"gpt-3.5-turbo\", messages });",
+            "kind": "sdk-call"
+          },
+          {
+            "file": "src/chat.ts",
+            "line": 8,
+            "symbol": "gpt-3.5-turbo",
+            "snippet": "model: \"gpt-3.5-turbo\"",
+            "kind": "model-string"
+          },
+          {
+            "file": "src/embed.ts",
+            "line": 12,
+            "symbol": "OpenAIApi.createEmbedding",
+            "snippet": "await openai.createEmbedding({ model: \"text-embedding-ada-002\", input });",
+            "kind": "sdk-call"
+          }
+        ]
+      }
+    ]
+  },
+  "alerts": [
+    {
+      "id": "demo__forewarned-sample--openai-node-v4",
+      "repo": "demo/forewarned-sample",
+      "changeId": "openai-node-v4",
+      "type": "breaking",
+      "callSites": [
+        {
+          "file": "src/chat.ts",
+          "line": 1,
+          "symbol": "Configuration",
+          "snippet": "import { Configuration, OpenAIApi } from \"openai\";",
+          "kind": "import"
+        },
+        {
+          "file": "src/chat.ts",
+          "line": 8,
+          "symbol": "OpenAIApi.createChatCompletion",
+          "snippet": "const res = await openai.createChatCompletion({ model: \"gpt-3.5-turbo\", messages });",
+          "kind": "sdk-call"
+        },
+        {
+          "file": "src/embed.ts",
+          "line": 12,
+          "symbol": "OpenAIApi.createEmbedding",
+          "snippet": "await openai.createEmbedding({ model: \"text-embedding-ada-002\", input });",
+          "kind": "sdk-call"
+        }
+      ],
+      "status": "open"
+    },
+    {
+      "id": "demo__forewarned-sample--openai-legacy-models-2026-10-23",
+      "repo": "demo/forewarned-sample",
+      "changeId": "openai-legacy-models-2026-10-23",
+      "type": "deprecation",
+      "deadline": "2026-10-23",
+      "callSites": [
+        {
+          "file": "src/chat.ts",
+          "line": 8,
+          "symbol": "gpt-3.5-turbo",
+          "snippet": "model: \"gpt-3.5-turbo\"",
+          "kind": "model-string"
+        }
+      ],
+      "status": "open"
+    },
+    {
+      "id": "demo__forewarned-sample--openai-responses-api",
+      "repo": "demo/forewarned-sample",
+      "changeId": "openai-responses-api",
+      "type": "feature",
+      "callSites": [
+        {
+          "file": "src/chat.ts",
+          "line": 8,
+          "symbol": "OpenAIApi.createChatCompletion",
+          "snippet": "const res = await openai.createChatCompletion({ model: \"gpt-3.5-turbo\", messages });",
+          "kind": "sdk-call"
+        }
+      ],
+      "status": "open"
+    }
+  ],
+  "changes": [
+    {
+      "id": "openai-node-v4",
+      "provider": "openai",
+      "type": "breaking",
+      "title": "OpenAI Node SDK v3 → v4",
+      "summary": "openai v4 is a rewrite: Configuration and OpenAIApi are gone, methods moved to resource namespaces, and responses are no longer wrapped in .data.",
+      "sourceUrl": "https://github.com/openai/openai-node/discussions/217",
+      "affects": {
+        "package": "openai",
+        "versionRange": "<4.0.0",
+        "symbols": ["Configuration", "OpenAIApi", "createChatCompletion", "createCompletion", "createEmbedding", "createImage"]
+      },
+      "migration": "Upgrade openai to ^4 and migrate Configuration/OpenAIApi call sites to the v4 client."
+    },
+    {
+      "id": "openai-legacy-models-2026-10-23",
+      "provider": "openai",
+      "type": "deprecation",
+      "title": "Legacy OpenAI models shut down on Oct 23, 2026",
+      "summary": "OpenAI is removing older models including gpt-3.5-turbo on October 23, 2026. Requests to them will fail after that date.",
+      "effectiveDate": "2026-10-23",
+      "sourceUrl": "https://developers.openai.com/api/docs/deprecations",
+      "affects": {
+        "patterns": ["^gpt-3\\.5-turbo(-0125)?$"]
+      },
+      "migration": "Replace gpt-3.5-turbo with gpt-5.6-terra."
+    },
+    {
+      "id": "openai-responses-api",
+      "provider": "openai",
+      "type": "feature",
+      "title": "Adopt OpenAI's Responses API for chat calls",
+      "summary": "OpenAI now recommends the Responses API over Chat Completions for new work. Chat Completions still works — this is an opportunity, not a required fix.",
+      "sourceUrl": "https://developers.openai.com/api/docs/guides/migrate-to-responses",
+      "affects": {
+        "package": "openai",
+        "symbols": ["createChatCompletion"],
+        "patterns": ["chat\\.completions\\.create"]
+      },
+      "migration": "Move chat calls from Chat Completions to the Responses API."
+    }
+  ]
+}

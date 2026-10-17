@@ -1,26 +1,195 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ink: #13232b;
+  --ink-soft: #3a4f58;
+  --paper: #eef3f0;
+  --paper-deep: #dce6e1;
+  --mist: #c5d4cd;
+  --teal: #1f6f66;
+  --teal-deep: #0f4a44;
+  --signal: #c45f2c;
+  --signal-soft: #e8a07a;
+  --warn: #a16207;
+  --line: color-mix(in oklab, var(--ink) 12%, transparent);
+  --surface: color-mix(in oklab, white 72%, var(--paper));
+  --ok: #1f6f66;
+  --fail: #9b2c2c;
+  --background: var(--paper);
+  --foreground: var(--ink);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-mist: var(--mist);
+  --color-teal: var(--teal);
+  --color-teal-deep: var(--teal-deep);
+  --color-signal: var(--signal);
+  --color-signal-soft: var(--signal-soft);
+  --color-warn: var(--warn);
+  --color-line: var(--line);
+  --color-surface: var(--surface);
+  --color-ok: var(--ok);
+  --color-fail: var(--fail);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  min-height: 100%;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--font-body), ui-sans-serif, sans-serif;
+}
+
+/* Atmosphere: cool mist wash + soft horizon, not flat */
+.fw-atmosphere {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 80% at 12% -10%, color-mix(in oklab, var(--teal) 18%, transparent), transparent 55%),
+    radial-gradient(90% 70% at 88% 8%, color-mix(in oklab, var(--signal) 14%, transparent), transparent 50%),
+    linear-gradient(165deg, #f7faf8 0%, var(--paper) 42%, var(--paper-deep) 100%);
+}
+
+.fw-atmosphere::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--ink) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--ink) 5%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, black 0%, transparent 72%);
+  pointer-events: none;
+}
+
+.fw-atmosphere::after {
+  content: "";
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  bottom: -18%;
+  height: 42%;
+  z-index: -1;
+  background: radial-gradient(ellipse at center, color-mix(in oklab, var(--teal) 12%, transparent), transparent 70%);
+  pointer-events: none;
+}
+
+@keyframes fw-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fw-draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes fw-pulse-line {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes fw-log-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.fw-rise {
+  animation: fw-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.fw-rise-delay-1 {
+  animation-delay: 0.08s;
+}
+
+.fw-rise-delay-2 {
+  animation-delay: 0.16s;
+}
+
+.fw-rise-delay-3 {
+  animation-delay: 0.28s;
+}
+
+.fw-brand-rule {
+  transform-origin: left center;
+  animation: fw-draw 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.35s both;
+}
+
+.fw-signal-dot {
+  animation: fw-pulse-line 2.4s ease-in-out infinite;
+}
+
+.fw-stagger > * {
+  animation: fw-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.fw-stagger > *:nth-child(1) {
+  animation-delay: 0.04s;
+}
+.fw-stagger > *:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.fw-stagger > *:nth-child(3) {
+  animation-delay: 0.16s;
+}
+.fw-stagger > *:nth-child(4) {
+  animation-delay: 0.22s;
+}
+.fw-stagger > *:nth-child(5) {
+  animation-delay: 0.28s;
+}
+
+.fw-log-line {
+  animation: fw-log-in 0.28s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fw-rise,
+  .fw-brand-rule,
+  .fw-signal-dot,
+  .fw-stagger > *,
+  .fw-log-line {
+    animation: none !important;
+  }
 }
