@@ -66,3 +66,12 @@ export async function openOrUpdatePR(
   }
   return url;
 }
+
+// Open PRs on this repo from our own forewarned/* branches.
+export async function openForewarnedPRs(ref: RepoRef): Promise<{ number: number; branch: string; title: string; url: string }[]> {
+  const gh = octokit();
+  const prs = await gh.paginate(gh.pulls.list, { owner: ref.owner, repo: ref.name, state: "open", per_page: 100 });
+  return prs
+    .filter((p) => p.head.ref.startsWith("forewarned/") && p.head.repo?.full_name === ref.slug)
+    .map((p) => ({ number: p.number, branch: p.head.ref, title: p.title, url: p.html_url }));
+}

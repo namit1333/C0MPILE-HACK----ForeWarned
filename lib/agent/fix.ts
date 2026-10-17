@@ -1,7 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
-import { assertPushable, openOrUpdatePR } from "../github";
+import { assertPushable, openForewarnedPRs, openOrUpdatePR } from "../github";
+import { loadChanges } from "../matcher";
 import { gitAuthArgs, parseRepo, sh } from "../repo";
 import { runChecksIsolated, sandboxEnabled } from "../sandbox";
 import { exercisingTests, installDeps, runChecks, updateLockfile, verificationLabel, type Checks } from "../verify";
@@ -129,7 +130,9 @@ const LABEL_TEXT: Record<Verification, string> = {
   unverified: "Neither the type check nor an exercising test passed. Review carefully.",
 };
 
-function prBody(alert: Alert, change: ChangeRecord, r: FixResult, evidence: string[], checksWhere: Checks["where"]): string {
+type StackedOn = { number: number; branch: string; title: string };
+
+function prBody(alert: Alert, change: ChangeRecord, r: FixResult, evidence: string[], checksWhere: Checks["where"], stackedOn?: StackedOn): string {
   const icon = (c: CheckResult) => (c === "pass" ? "✅ pass" : c === "fail" ? "❌ fail" : "➖ skipped");
   return [
     `## ${change.title}`,
@@ -138,6 +141,8 @@ function prBody(alert: Alert, change: ChangeRecord, r: FixResult, evidence: stri
     ``,
     `**Source:** ${change.sourceUrl}`,
     change.effectiveDate ? `**Deadline:** ${change.effectiveDate}` : ``,
+    change.type === "feature" ? `**Type:** opportunity. Nothing is broken; this adopts a new ${change.provider} feature that applies to this code.` : ``,
+    stackedOn ? `**Builds on #${stackedOn.number}** (${stackedOn.title}), so this diff shows only the new feature. Merge #${stackedOn.number} first; GitHub then retargets this PR to the default branch.` : ``,
     ``,
     `### Call sites touched`,
     ...alert.callSites.map((s) => `- \`${s.file}:${s.line}\` — \`${s.symbol}\``),
@@ -196,6 +201,25 @@ export async function fixAlert(
     if (pushing) {
       log(`Checking we own ${ref.slug}`);
       base = (await assertPushable(ref)).defaultBranch;
+    }
+
+    // A feature that needs an SDK upgrade builds on our open PR for that upgrade, if there is one,
+    // so the opportunity PR shows only the new feature instead of repeating the upgrade.
+    let stackedOn: StackedOn | undefined;
+    if (change.type === "feature" && change.affects.package && ref.owner !== "local") {
+      const changes = await loadChanges();
+      const upgrades = new Set(changes.filter((c) => c.type === "breaking" && c.affects.package === change.affects.package).map((c) => `forewarned/${c.id}`));
+      stackedOn = (await openForewarnedPRs(ref)).find((pr) => upgrades.has(pr.branch));
+      if (stackedOn) {
+        const fetched = await sh("git", [...gitAuthArgs(), "fetch", "--depth", "1", "origin", stackedOn.branch], { cwd: dir, timeoutMs: 60_000 });
+        if (fetched.ok && (await sh("git", ["checkout", "--detach", "FETCH_HEAD"], { cwd: dir })).ok) {
+          base = stackedOn.branch;
+          log(`Building on #${stackedOn.number} (${stackedOn.branch}) so this PR shows only the new feature`);
+        } else {
+          log(`Could not fetch ${stackedOn.branch}; building on the default branch instead`);
+          stackedOn = undefined;
+        }
+      }
     }
 
     // Sandbox mode: the repo's install scripts, tsc and tests run only inside a Freestyle VM, never here.
@@ -299,7 +323,7 @@ export async function fixAlert(
       branch,
       base,
       title: `[Forewarned] ${change.title}`,
-      body: prBody(alert, change, result, evidence, after.where),
+      body: prBody(alert, change, result, evidence, after.where, stackedOn),
       labels: ["forewarned", `verified: ${result.verification}`],
     });
     log(`PR opened: ${result.prUrl}`);

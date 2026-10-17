@@ -1,0 +1,14 @@
+{
+  "id": "openai-responses-api",
+  "provider": "openai",
+  "type": "feature",
+  "title": "Adopt OpenAI's Responses API for chat calls",
+  "summary": "OpenAI now recommends the Responses API over Chat Completions for all new work: better results from reasoning models, lower cost through better cache use, and built-in tools and state. Chat Completions still works, so this is an upgrade you can take, not a fix you need.",
+  "sourceUrl": "https://developers.openai.com/api/docs/guides/migrate-to-responses",
+  "affects": {
+    "package": "openai",
+    "symbols": ["createChatCompletion"],
+    "patterns": ["chat\\.completions\\.create"]
+  },
+  "migration": "Move chat calls from Chat Completions to the Responses API, following OpenAI's migration guide.\n1. The Responses API needs openai-node v4. If package.json has \"openai\" below 4.104.0, set it to \"^4.104.0\" and apply the v4 client changes first: `import OpenAI from \"openai\"`, `new OpenAI({ apiKey })` instead of `new OpenAIApi(new Configuration(...))`, and no `.data` wrapper on responses.\n2. Replace `openai.chat.completions.create({ model, messages })` (or v3 `openai.createChatCompletion(...)`) with `openai.responses.create({ model, instructions, input })`.\n3. Move any `{ role: \"system\" }` message into the top-level `instructions` string. Pass the remaining user/assistant messages as the `input` array (each item `{ role, content }` with string content); a single user message can be passed as a plain string.\n4. Read the reply text from `response.output_text` instead of `choices[0].message.content`. Where code stores the assistant message for conversation history, store `{ role: \"assistant\", content: response.output_text }`.\n5. Message types: use `OpenAI.Responses.ResponseInputItem` (or `{ role: \"user\" | \"assistant\"; content: string }`) instead of Chat Completions message types.\nKeep model ids, prompts and every non-chat call (images, embeddings, audio) unchanged. Do not add tools, streaming or previous_response_id."
+}
