@@ -11,12 +11,8 @@ interface RepoState {
   alerts: Alert[];
   changes: ChangeRecord[];
   notes?: string[];
-  openPRs?: Record<string, { number: number; url: string }>; // live from GitHub at scan time
+  openPRs?: Record<string, { number: number; url: string }>; // our open PRs, looked up live on GitHub at scan time
 }
-
-const PROVIDER_NAMES: Record<string, string> = {
-  openai: "OpenAI", supabase: "Supabase", stripe: "Stripe", anthropic: "Anthropic", resend: "Resend", twilio: "Twilio",
-};
 
 function formatDeadline(dateStr?: string): string | null {
   if (!dateStr) return null;
@@ -29,14 +25,13 @@ function formatDeadline(dateStr?: string): string | null {
     day: "numeric",
     year: "numeric",
   });
-  const rel = days > 1 ? `in ${days} days` : days === 1 ? "tomorrow" : days === 0 ? "today" : `${-days} days ago`;
-  return `${label} · ${rel}`;
+  return `${label} · in ${days} days`;
 }
 
 export default function RepoDashboard({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [state, setState] = useState<RepoState | null>(null);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ openai: true });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -94,8 +89,8 @@ export default function RepoDashboard({ params }: { params: Promise<{ id: string
             </a>
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-zinc-50 sm:text-4xl">
-            Depends on <span className="text-teal-400">{totalApis} API{totalApis === 1 ? "" : "s"}</span> ·{" "}
-            <span className="text-teal-400">{totalCallSites} call site{totalCallSites === 1 ? "" : "s"}</span>
+            Depends on <span className="text-teal-400">{totalApis} API</span> ·{" "}
+            <span className="text-teal-400">{totalCallSites} call sites</span>
           </h1>
         </div>
         <div className="flex items-center gap-3">
@@ -111,14 +106,6 @@ export default function RepoDashboard({ params }: { params: Promise<{ id: string
         </div>
       </div>
 
-      {state.notes && state.notes.length > 0 && (
-        <div className="mb-6 space-y-1 rounded-xl border border-amber-500/30 bg-amber-500/10 px-5 py-3 font-mono text-xs text-amber-200">
-          {state.notes.map((n) => (
-            <p key={n}>{n}</p>
-          ))}
-        </div>
-      )}
-
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Inventory Column */}
         <section className="rounded-xl border border-zinc-800 bg-zinc-950 lg:col-span-5">
@@ -127,7 +114,7 @@ export default function RepoDashboard({ params }: { params: Promise<{ id: string
           </div>
           <div>
             {state.inventory.dependencies.map((dep) => {
-              const key = `${dep.provider}|${dep.package ?? ""}`;
+              const key = dep.provider;
               const isOpen = expanded[key] ?? true;
               return (
                 <div key={key} className="border-b border-zinc-800 last:border-b-0">
@@ -137,8 +124,8 @@ export default function RepoDashboard({ params }: { params: Promise<{ id: string
                     className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-zinc-900/60"
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-lg font-bold text-zinc-100">
-                        {PROVIDER_NAMES[dep.provider] ?? dep.provider}
+                      <span className="text-lg font-bold capitalize text-zinc-100">
+                        {dep.provider}
                       </span>
                       {dep.package && (
                         <span className="rounded border border-teal-500/30 bg-teal-500/10 px-2 py-0.5 font-mono text-xs text-teal-300">
@@ -158,11 +145,11 @@ export default function RepoDashboard({ params }: { params: Promise<{ id: string
                           key={`${site.file}:${site.line}:${idx}`}
                           className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 font-mono text-xs"
                         >
-                          <div className="mb-1 flex items-center justify-between gap-2 text-teal-400">
-                            <span className="shrink-0">
+                          <div className="mb-1 flex items-center justify-between text-teal-400">
+                            <span>
                               {site.file}:{site.line}
                             </span>
-                            <span className="min-w-0 truncate rounded bg-zinc-900 px-1.5 py-0.5 text-zinc-300">
+                            <span className="rounded bg-zinc-900 px-1.5 py-0.5 text-zinc-300">
                               {site.symbol}
                             </span>
                           </div>
@@ -216,7 +203,7 @@ export default function RepoDashboard({ params }: { params: Promise<{ id: string
                     </div>
                     {pr && (
                       <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-3 py-0.5 font-mono text-xs text-emerald-300">
-                        ✓ PR #{pr.number} open
+                        ✓ PR #{pr.number} opened
                       </span>
                     )}
                   </div>

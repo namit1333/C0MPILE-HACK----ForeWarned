@@ -7,7 +7,7 @@ import { loadChanges, match, repoId } from "./matcher";
 import { openForewarnedPRs } from "./github";
 import { cloneRepo, parseRepo } from "./repo";
 import { scanRepoDetailed } from "./scanner/scan";
-import type { Alert, ChangeRecord, FixResult, Inventory } from "./types";
+import type { Alert, ChangeRecord, FixResult, Inventory, Verification } from "./types";
 
 const DATA = path.join(process.cwd(), "data");
 const REPOS = path.join(DATA, "repos");
@@ -26,6 +26,7 @@ export interface RepoState {
 export interface OpenPR {
   number: number;
   url: string;
+  verification?: Verification; // from the PR's "verified: ..." label
 }
 
 const prNumber = (url: string) => Number(url.match(/\/pull\/(\d+)/)?.[1] ?? 0);
@@ -69,7 +70,8 @@ export async function scan(repoUrl: string, onLog: (s: string) => void = () => {
       for (const a of alerts) {
         const pr = prs.find((p) => p.branch === `forewarned/${a.changeId}`);
         if (pr) {
-          openPRs[a.id] = { number: pr.number, url: pr.url };
+          const label = pr.labels.find((l) => l.startsWith("verified: "))?.slice("verified: ".length);
+          openPRs[a.id] = { number: pr.number, url: pr.url, ...(label ? { verification: label as Verification } : {}) };
           a.status = "pr-opened";
         }
       }
@@ -114,11 +116,11 @@ export async function findAlert(alertId: string): Promise<{ state: RepoState; al
   return change ? { state, alert, change } : undefined;
 }
 
-async function setAlertStatus(state: RepoState, alertId: string, status: Alert["status"], prUrl?: string) {
+async function setAlertStatus(state: RepoState, alertId: string, status: Alert["status"], prUrl?: string, verification?: Verification) {
   const fresh = (await getRepo(state.id)) ?? state;
   const a = fresh.alerts.find((x) => x.id === alertId);
   if (a) a.status = status;
-  if (prUrl) fresh.openPRs = { ...fresh.openPRs, [alertId]: { number: prNumber(prUrl), url: prUrl } };
+  if (prUrl) fresh.openPRs = { ...fresh.openPRs, [alertId]: { number: prNumber(prUrl), url: prUrl, verification } };
   await writeJson(path.join(REPOS, `${fresh.id}.json`), fresh);
 }
 
@@ -164,7 +166,7 @@ export async function startFix(alertId: string, opts: FixOptions = {}): Promise<
     }
     await persist();
     // A dry run opens no PR, so the alert goes back to "open" rather than claiming one.
-    await setAlertStatus(state, alertId, job.prUrl ? "pr-opened" : job.status === "done" ? "open" : "failed", job.prUrl);
+    await setAlertStatus(state, alertId, job.prUrl ? "pr-opened" : job.status === "done" ? "open" : "failed", job.prUrl, job.verification);
   })();
 
   return jobId;
