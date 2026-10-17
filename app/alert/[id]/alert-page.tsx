@@ -20,62 +20,6 @@ const VERIFICATION_BADGE: Record<Verification, { text: string; title: string }> 
   unverified: { text: "Unverified", title: "Neither the type check nor an exercising test passed" },
 };
 
-// Pre-baked demo results when GitHub has no open PR yet. Live jobs override these.
-const DEMO_PRS: Record<string, { prUrl: string; verification: Verification; log: string[] }> = {
-  "openai-legacy-models-2026-10-23": {
-    prUrl: "https://github.com/A5bhinav/openai-api-example/pull/3",
-    verification: "type-checked",
-    log: [
-      "Cloning A5bhinav/openai-api-example",
-      "Freestyle VM ready (1.8s)",
-      "Running checks before the change in an isolated Freestyle VM (tsc, tests)",
-      "Before: tsc pass, tests skipped",
-      "Created branch forewarned/openai-legacy-models-2026-10-23",
-      "Patching 1 call site in 1 file(s) with claude-opus-5-5",
-      "Changed src/commands/chat.ts",
-      "Running checks after the change in an isolated Freestyle VM (tsc, tests)",
-      "After: tsc pass, tests skipped",
-      "Verification: type-checked",
-      "PR opened: https://github.com/A5bhinav/openai-api-example/pull/3",
-    ],
-  },
-  "openai-node-v4": {
-    prUrl: "https://github.com/A5bhinav/openai-api-example/pull/4",
-    verification: "type-checked",
-    log: [
-      "Cloning A5bhinav/openai-api-example",
-      "Freestyle VM ready (1.9s)",
-      "Running checks before the change in an isolated Freestyle VM (tsc, tests)",
-      "Before: tsc pass, tests skipped",
-      "Created branch forewarned/openai-node-v4",
-      "Patching 5 call sites in 3 file(s) with claude-opus-5-5",
-      "Changed package.json, src/app.ts, src/commands/chat.ts, src/commands/image.ts",
-      "Running checks after the change in an isolated Freestyle VM (tsc, tests)",
-      "After: tsc pass, tests skipped",
-      "Verification: type-checked",
-      "PR opened: https://github.com/A5bhinav/openai-api-example/pull/4",
-    ],
-  },
-  "openai-responses-api": {
-    prUrl: "https://github.com/A5bhinav/openai-api-example/pull/5",
-    verification: "type-checked",
-    log: [
-      "Cloning A5bhinav/openai-api-example",
-      "Building on #4 (forewarned/openai-node-v4) so this PR shows only the new feature",
-      "Freestyle VM ready (1.7s)",
-      "Running checks before the change in an isolated Freestyle VM (tsc, tests)",
-      "Before: tsc pass, tests skipped",
-      "Created branch forewarned/openai-responses-api",
-      "Patching 1 call site in 1 file(s) with claude-opus-5-5",
-      "Changed src/commands/chat.ts",
-      "Running checks after the change in an isolated Freestyle VM (tsc, tests)",
-      "After: tsc pass, tests skipped",
-      "Verification: type-checked",
-      "PR opened: https://github.com/A5bhinav/openai-api-example/pull/5",
-    ],
-  },
-};
-
 export default function AlertPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [data, setData] = useState<AlertPayload | null>(null);
@@ -85,7 +29,6 @@ export default function AlertPage({ params }: { params: Promise<{ id: string }> 
   const [job, setJob] = useState<Job | null>(null);
   const [verification, setVerification] = useState<Verification | undefined>(undefined);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [live, setLive] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const dryRun = useSearchParams().get("dryRun") === "1"; // rehearsal: patch and check without pushing or opening a PR
 
@@ -113,12 +56,10 @@ export default function AlertPage({ params }: { params: Promise<{ id: string }> 
 
   async function triggerFix() {
     if (!data) return;
-    setLive(true);
     setStatus("running");
     setLog(["Starting fix job..."]);
     setJob(null);
     setPrUrl(undefined);
-    setVerification(undefined);
 
     const res = await fetch(`/api/alerts/${id}/fix${dryRun ? "?dryRun=1" : ""}`, { method: "POST" });
     const body = await res.json();
@@ -156,17 +97,6 @@ export default function AlertPage({ params }: { params: Promise<{ id: string }> 
 
   const { alert, change } = data;
   const repoSlugId = alert.repo.replace("/", "__");
-  const demo = DEMO_PRS[change.id];
-  const showDemoHint = !live && status === "done" && Boolean(demo) && !job;
-
-  function showDemoResult() {
-    if (!demo || live || status === "running") return;
-    setLog(demo.log);
-    setPrUrl(demo.prUrl);
-    setVerification(demo.verification);
-    setStatus("done");
-    setJob(null);
-  }
 
   return (
     <main className="mx-auto w-full max-w-5xl px-6 py-12">
@@ -195,29 +125,18 @@ export default function AlertPage({ params }: { params: Promise<{ id: string }> 
         <p className="text-base text-zinc-400">{change.summary}</p>
 
         <div className="mt-6">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="mb-3 flex items-center justify-between">
             <h2 className="font-mono text-sm font-semibold text-zinc-300">
               Affected call sites ({alert.callSites.length})
             </h2>
-            <div className="flex flex-wrap items-center gap-3">
-              {demo && status === "idle" && (
-                <button
-                  type="button"
-                  onClick={showDemoResult}
-                  className="font-mono text-xs text-zinc-500 underline hover:text-teal-400"
-                >
-                  Show demo result
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={triggerFix}
-                disabled={status === "running"}
-                className="h-11 rounded-lg bg-teal-500 px-5 font-semibold text-zinc-950 hover:opacity-90 disabled:opacity-50"
-              >
-                {status === "running" ? "Fixing..." : status === "done" && prUrl ? "Re-run fix PR" : "Open fix PR"}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={triggerFix}
+              disabled={status === "running"}
+              className="h-11 rounded-lg bg-teal-500 px-5 font-semibold text-zinc-950 hover:opacity-90 disabled:opacity-50"
+            >
+              {status === "running" ? "Fixing..." : "Open fix PR"}
+            </button>
           </div>
           <div className="space-y-2">
             {alert.callSites.map((s, idx) => (
@@ -240,20 +159,11 @@ export default function AlertPage({ params }: { params: Promise<{ id: string }> 
 
       {log.length > 0 && (
         <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950 p-6">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-zinc-100">
-              {live || status === "running" ? "Live progress" : "Progress"}
-            </h2>
-            {showDemoHint && (
-              <span className="font-mono text-xs text-zinc-500">Demo result · click Open fix PR to run live</span>
-            )}
-          </div>
+          <h2 className="mb-4 text-lg font-bold text-zinc-100">Live progress</h2>
           <div className="space-y-2 font-mono text-sm">
             {log.map((line, i) => (
               <div key={i} className="flex items-start gap-3">
-                <span className={line.startsWith("Failed") ? "text-rose-400" : status === "running" && i === log.length - 1 ? "text-teal-400" : "text-emerald-400"}>
-                  {line.startsWith("Failed") ? "✗" : status === "running" && i === log.length - 1 ? "◌" : "✓"}
-                </span>
+                <span className={line.startsWith("Failed") ? "text-rose-400" : "text-emerald-400"}>{line.startsWith("Failed") ? "✗" : "✓"}</span>
                 <span className="text-zinc-300">{line}</span>
               </div>
             ))}
@@ -281,26 +191,13 @@ export default function AlertPage({ params }: { params: Promise<{ id: string }> 
               </span>
             )}
           </div>
-          {job ? (
+          {job && (
             <p className="mt-3 font-mono text-sm text-zinc-400">
               {job.checks.filter((c) => c.name === "tsc").map((c) => `tsc ${c.before} → ${c.after}`)[0] ?? "tsc skipped"} ·{" "}
               {job.log.some((l) => l.startsWith("Freestyle VM ready")) ? "Freestyle isolated VM" : "local checks"} ·{" "}
               {job.attempts} attempt{job.attempts === 1 ? "" : "s"}
             </p>
-          ) : (
-            <p className="mt-3 font-mono text-sm text-zinc-400">
-              tsc pass → pass · Freestyle isolated VM · 1 attempt
-            </p>
           )}
-        </div>
-      )}
-
-      {status === "failed" && (
-        <div className="rounded-xl border border-rose-500/40 bg-zinc-950 p-6">
-          <p className="text-lg font-bold text-rose-300">Fix failed</p>
-          <p className="mt-2 font-mono text-sm text-zinc-400">
-            Check GITHUB_TOKEN, agent access, and that the repo is a fork you can push to.
-          </p>
         </div>
       )}
     </main>
