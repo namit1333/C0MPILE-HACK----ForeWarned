@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, appendFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import os from "node:os";
@@ -55,9 +55,21 @@ export async function sh(
   }
 }
 
+// GITHUB_TOKEN from .env.local, falling back to the GitHub CLI's login.
+export function githubToken(): string | undefined {
+  if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
+  try {
+    const t = execFileSync("gh", ["auth", "token"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    if (t) process.env.GITHUB_TOKEN = t;
+    return t || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // Basic-auth header so the token is never written to .git/config or echoed in a URL.
 export function gitAuthArgs(): string[] {
-  const token = process.env.GITHUB_TOKEN;
+  const token = githubToken();
   if (!token) return [];
   const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
   return ["-c", `http.https://github.com/.extraheader=AUTHORIZATION: basic ${basic}`];

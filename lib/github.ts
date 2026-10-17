@@ -1,11 +1,11 @@
 import { Octokit } from "@octokit/rest";
-import type { RepoRef } from "./repo";
+import { githubToken, type RepoRef } from "./repo";
 
 let client: Octokit | undefined;
 
 export function octokit(): Octokit {
-  const auth = process.env.GITHUB_TOKEN;
-  if (!auth) throw new Error("GITHUB_TOKEN is not set (put it in .env.local)");
+  const auth = githubToken();
+  if (!auth) throw new Error("GITHUB_TOKEN is not set (put it in .env.local, or run `gh auth login`)");
   client ??= new Octokit({ auth, userAgent: "forewarned-hackathon" });
   return client;
 }
