@@ -45,6 +45,7 @@ async function walk(dir: string, root: string, out: string[] = []): Promise<stri
   return out;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped package.json / lockfile shapes
 async function readJson(file: string): Promise<any> {
   try {
     return JSON.parse(await readFile(file, "utf8"));
@@ -228,8 +229,7 @@ function scanSourceFile(sf: SourceFile, rel: string, known: ExportedClients): { 
   ];
   for (const s of strings) {
     if (s.getFirstAncestorByKind(SyntaxKind.ImportDeclaration)) continue;
-    const raw = Node.isTemplateHead(s) ? s.getText().slice(1, -2) : (s as any).getLiteralValue?.() ?? s.getText().slice(1, -1);
-    const value = String(raw);
+    const value = Node.isTemplateHead(s) ? s.getText().slice(1, -2) : s.getLiteralValue();
     if (OPENAI_MODEL_RE.test(value)) {
       found.push({ provider: "openai", site: site(s, value, "model-string") });
     } else if (/^https?:\/\//.test(value)) {

@@ -63,6 +63,7 @@ export async function scan(repoUrl: string, onLog: (s: string) => void = () => {
 
 // GET /api/repos/[id]
 export async function getRepo(id: string): Promise<RepoState | undefined> {
+  if (!/^[\w.-]+$/.test(id) || id.includes("..")) return undefined; // ids come from URLs
   return readJson<RepoState>(path.join(REPOS, `${id}.json`));
 }
 
@@ -96,6 +97,8 @@ export async function startFix(alertId: string, opts: FixOptions = {}): Promise<
   const found = await findAlert(alertId);
   if (!found) throw new Error(`Unknown alert ${alertId}. Scan the repo first.`);
   const { state, alert, change } = found;
+  // One fix per alert at a time (a rescan resets statuses if a run ever dies mid-way).
+  if (alert.status === "fixing") throw new Error(`A fix for ${alertId} is already running.`);
   const jobId = randomUUID().slice(0, 8);
   const file = path.join(JOBS, `${jobId}.json`);
   const job: Job = {
@@ -130,7 +133,8 @@ export async function startFix(alertId: string, opts: FixOptions = {}): Promise<
       job.status = "failed";
     }
     await persist();
-    await setAlertStatus(state, alertId, job.status === "done" ? "pr-opened" : "failed");
+    // A dry run opens no PR, so the alert goes back to "open" rather than claiming one.
+    await setAlertStatus(state, alertId, job.prUrl ? "pr-opened" : job.status === "done" ? "open" : "failed");
   })();
 
   return jobId;
