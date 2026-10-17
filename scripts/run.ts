@@ -3,7 +3,7 @@
 import { fixAlert } from "../lib/agent/fix";
 import { loadChanges, match } from "../lib/matcher";
 import { cloneRepo, parseRepo } from "../lib/repo";
-import { inventoryStats, scanRepo } from "../lib/scanner/scan";
+import { inventoryStats, scanRepoDetailed } from "../lib/scanner/scan";
 
 try { process.loadEnvFile(".env.local"); } catch {}
 
@@ -25,8 +25,9 @@ async function main() {
   const dir = await cloneRepo(repoUrl);
   step(`Cloned to ${dir}`);
 
-  const inventory = await scanRepo(dir, ref.slug);
+  const { inventory, notes } = await scanRepoDetailed(dir, ref.slug);
   const stats = inventoryStats(inventory);
+  for (const n of notes) step(`NOTE ${n}`);
   step(`Depends on ${stats.apis} APIs, ${stats.callSites} call sites`);
   for (const d of inventory.dependencies) {
     console.log(`  ${d.provider}${d.package ? ` (${d.package}@${d.version ?? "?"})` : ""}: ${d.callSites.length} sites`);

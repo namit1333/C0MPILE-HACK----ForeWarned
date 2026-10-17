@@ -5,7 +5,7 @@ import path from "node:path";
 import { fixAlert, type FixOptions } from "./agent/fix";
 import { loadChanges, match, repoId } from "./matcher";
 import { cloneRepo, parseRepo } from "./repo";
-import { scanRepo } from "./scanner/scan";
+import { scanRepoDetailed } from "./scanner/scan";
 import type { Alert, ChangeRecord, FixResult, Inventory } from "./types";
 
 const DATA = path.join(process.cwd(), "data");
@@ -18,6 +18,7 @@ export interface RepoState {
   inventory: Inventory;
   alerts: Alert[];
   changes: ChangeRecord[]; // the records behind the alerts, for the UI
+  notes: string[]; // caveats to show above the inventory (unsupported language, partial scan, ...)
 }
 
 export type JobStatus = "running" | "done" | "failed";
@@ -46,7 +47,7 @@ export async function scan(repoUrl: string, onLog: (s: string) => void = () => {
   onLog(`Cloning ${ref.slug}`);
   const dir = await cloneRepo(repoUrl);
   onLog("Scanning for API usage");
-  const inventory = await scanRepo(dir, ref.slug);
+  const { inventory, notes } = await scanRepoDetailed(dir, ref.slug);
   const changes = await loadChanges();
   const alerts = match(inventory, changes);
   const used = new Set(alerts.map((a) => a.changeId));
@@ -56,6 +57,7 @@ export async function scan(repoUrl: string, onLog: (s: string) => void = () => {
     inventory,
     alerts,
     changes: changes.filter((c) => used.has(c.id)),
+    notes,
   };
   await writeJson(path.join(REPOS, `${state.id}.json`), state);
   return state;
