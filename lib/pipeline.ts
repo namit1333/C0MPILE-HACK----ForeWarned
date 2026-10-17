@@ -1,5 +1,5 @@
 // Glue for the API routes: each function maps to one route. Runtime state is JSON in data/.
-import { mkdir, readdir, readFile, writeFile, rename } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile, rename, stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fixAlert, type FixOptions } from "./agent/fix";
@@ -183,6 +183,24 @@ export async function startFix(alertId: string, opts: FixOptions = {}): Promise<
   })();
 
   return jobId;
+}
+
+// The most recent finished job that opened this PR, so a pre-run fix shows its real log.
+export async function findJobByPrUrl(prUrl: string): Promise<Job | undefined> {
+  let files: string[] = [];
+  try {
+    files = (await readdir(JOBS)).filter((f) => f.endsWith(".json"));
+  } catch {
+    return undefined;
+  }
+  let best: { job: Job; mtime: number } | undefined;
+  for (const f of files) {
+    const job = await readJson<Job>(path.join(JOBS, f));
+    if (job?.prUrl !== prUrl || job.status !== "done") continue;
+    const mtime = (await stat(path.join(JOBS, f))).mtimeMs;
+    if (!best || mtime > best.mtime) best = { job, mtime };
+  }
+  return best?.job;
 }
 
 // GET /api/jobs/[id]

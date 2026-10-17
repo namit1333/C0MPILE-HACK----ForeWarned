@@ -10,6 +10,7 @@ interface AlertPayload {
   change: ChangeRecord;
   repo: string;
   pr?: { number: number; url: string; verification?: Verification }; // our open PR for this alert, live from GitHub
+  job?: Job; // the real run that opened that PR, if it ran on this machine
 }
 
 type Job = FixResult & { status: "running" | "done" | "failed" };
@@ -61,8 +62,12 @@ export default function AlertPage({ params }: { params: Promise<{ id: string }> 
         // A PR for this change is already open on GitHub: show it.
         if (payload.pr) {
           setPrUrl(payload.pr.url);
-          setVerification(payload.pr.verification);
+          setVerification(payload.job?.verification ?? payload.pr.verification);
           setStatus("done");
+          if (payload.job) {
+            setJob(payload.job);
+            setLog(payload.job.log);
+          }
         }
       })
       .catch((e) => setLoadError(e instanceof Error ? e.message : String(e)));
