@@ -1,6 +1,10 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;500;600;700&family=Syne:wght@500;600;700;800&display=swap");
 @import "tailwindcss";
 
 :root {
+  --font-display: "Syne", ui-sans-serif, sans-serif;
+  --font-body: "Source Sans 3", ui-sans-serif, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
   --ink: #13232b;
   --ink-soft: #3a4f58;
   --paper: #eef3f0;
