@@ -1,69 +1,110 @@
-import Image from "next/image";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { ErrorBox, Spinner } from "./ui";
+
+const DEMO_REPOS = ["A5bhinav/openai-api-example"];
 
 export default function Home() {
+  const router = useRouter();
+  const [repoUrl, setRepoUrl] = useState("");
+  const [scanning, setScanning] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function scan(url: string) {
+    if (!url.trim() || scanning) return;
+    setScanning(url);
+    setError(null);
+    try {
+      const res = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repoUrl: url.trim() }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? `Scan failed (${res.status})`);
+      router.push(`/repo/${body.id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setScanning(null);
+    }
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="mx-auto max-w-3xl pt-6 sm:pt-16">
+      <p className="font-mono text-xs uppercase tracking-[0.2em] text-amber-400/90">Self-maintaining APIs</p>
+      <h1 className="mt-4 text-4xl font-semibold tracking-tight text-zinc-50 sm:text-5xl">
+        Know what&apos;s about to break, before it does.
+      </h1>
+      <p className="mt-5 text-lg leading-relaxed text-zinc-400">
+        Dependabot tells you a new version exists. Forewarned tells you what&apos;s about to break, and what you&apos;re
+        missing, before it happens.
+      </p>
+      <p className="mt-3 text-sm leading-relaxed text-zinc-500">
+        Providers change their APIs constantly: breaking SDK releases, models shut down on a date, features nobody hears
+        about. Connect a repo to see every external API it depends on, what&apos;s coming, and get fix PRs labelled with
+        exactly what was verified.
+      </p>
+
+      <form
+        className="mt-10 flex flex-col gap-3 sm:flex-row"
+        onSubmit={(e) => {
+          e.preventDefault();
+          scan(repoUrl);
+        }}
+      >
+        <input
+          value={repoUrl}
+          onChange={(e) => setRepoUrl(e.target.value)}
+          placeholder="https://github.com/owner/repo"
+          spellCheck={false}
+          autoFocus
+          className="h-12 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-4 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400/70 focus:outline-none focus:ring-2 focus:ring-amber-400/20"
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        <button
+          type="submit"
+          disabled={!repoUrl.trim() || !!scanning}
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-amber-400 px-6 text-sm font-semibold text-zinc-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {scanning ? <><Spinner /> Scanning…</> : "Scan repo"}
+        </button>
+      </form>
+
+      {scanning && (
+        <p className="mt-3 font-mono text-xs text-zinc-500">Cloning {scanning} and mapping every API call…</p>
+      )}
+      {error && <div className="mt-4"><ErrorBox>{error}</ErrorBox></div>}
+
+      <div className="mt-8 flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-zinc-500">Try a demo repo:</span>
+        {DEMO_REPOS.map((r) => (
+          <button
+            key={r}
+            onClick={() => {
+              setRepoUrl(`https://github.com/${r}`);
+              scan(r);
+            }}
+            disabled={!!scanning}
+            className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-300 transition hover:border-zinc-500 hover:text-zinc-100 disabled:opacity-50"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+            {r}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-16 grid gap-4 sm:grid-cols-3">
+        {[
+          ["API inventory", "Every external SDK and API the repo uses, with every call site."],
+          ["What's coming", "Breaking releases, model shutdowns with dates, and new features that apply."],
+          ["Checked fix PRs", "Patched, type-checked in an isolated sandbox, and labelled honestly."],
+        ].map(([title, text]) => (
+          <div key={title} className="rounded-xl border border-zinc-800/80 p-4">
+            <h3 className="text-sm font-semibold text-zinc-200">{title}</h3>
+            <p className="mt-1.5 text-sm leading-relaxed text-zinc-500">{text}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
